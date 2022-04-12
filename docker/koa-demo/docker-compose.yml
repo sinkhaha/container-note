@@ -1,0 +1,21 @@
+version: "3.7"
+
+services:
+  app:
+    build: ./ # 此时是用本地目录进行构建，如果本地项目已经打包成一个镜像传到仓库，可以改成以下image指定镜像的方式
+    # image: sinkhaha/koa-demo:v1 
+    ports:
+      - 8080:8080
+    volumes:
+      - /Users/docker-test-volume-dir:/app/log # 挂载日志目录
+    environment:
+      - TZ=Asia/Shanghai
+  redis:
+    image: redis:6.0.14
+    volumes:
+      - redis:/data
+    environment:
+      - TZ=Asia/Shanghai
+
+volumes:
+  redis:
