@@ -12,29 +12,28 @@ module.exports = appInfo => {
      **/
     const config = exports = {};
 
-    // use for cookie sign key, should change to your own and keep security
     config.keys = appInfo.name + '_1650174072352_6499';
 
-    // add your middleware config here
     config.middleware = [];
 
-    // add your user config here
     const userConfig = {
-        // myAppName: 'egg',
     };
 
     config.mongoose = {
         client: {
-            url: 'mongodb://127.0.0.1/test',
-            options: {}
+            url: 'mongodb://admin:123456@mongo/admin', // mongo为容器network别名
+            options: {
+                useNewUrlParser: true,
+                useUnifiedTopology: true,
+            }
         },
     };
 
     config.redis = {
         client: {
           port: 6379,         
-          host: '127.0.0.1',
-          password: '123456',
+          host: 'redis', // redis为容器network别名
+          password: '',
           db: 0,
         },
       }
