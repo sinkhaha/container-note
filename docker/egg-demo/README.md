@@ -151,7 +151,7 @@ docker run -d --name=egg-demo1 -v ~/egg-demo/logs:/app/logs -p 8080:7001 --netwo
 
 
 
-# docker-compose方式
+# docker-compose方式启动
 
 ```bash
 # 项目下新建docker-compose.yml，文件内容见项目
