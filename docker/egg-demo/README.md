@@ -72,9 +72,8 @@ COPY . /app
 # 允许外界访问容器的7001端口
 EXPOSE 7001
 
-# 启动egg项目
+# 启动egg项目 注意：此处用npm run start命令，egg项目里的package.json文件里要去掉--daemon参数
 CMD npm run start
-
 ```
 
 2. 构建启动项目
