@@ -1,19 +1,24 @@
+# 项目介绍
+
+docker部署Egg.js项目
+
+
+
 # 项目技术栈
+
 Egg.js + redis + mongoose
 
 
 
-# 非docker-compose方式
+# 非docker-compose方式启动
 
 ###  创建网络(名为egg-demo-net)
 
-> 用于解决项目容器间跟redis容器/mongodb容器通信的问题
+> 用于解决项目容器间通信的问题，如项目容器跟redis容器通信，项目容器跟mongodb容器通信
 
 ```bash
 docker network create egg-demo-net
 ```
-
-#### 
 
 ### 部署redis
 
@@ -21,8 +26,6 @@ docker network create egg-demo-net
 # 共享egg-demo-net网络，别名为redis
 docker run -d -p 6379:6379 --name redis --network egg-demo-net --network-alias redis redis:latest
 ```
-
-
 
 ### 部署mongodb
 
@@ -45,8 +48,40 @@ db.auth('admin', '123456')
 
 ### 启动项目
 
+1. 项目根目录建立Dockerfile文件
+
+```bash
+# 设置node镜像，如果本地没有，会从Docker中拉取
+FROM node:14
+
+# 设置工作目录为/app
+WORKDIR /app
+
+# 拷贝package.json文件到工作目录
+# Docker构建镜像时，是一层一层构建的，仅当这一层有变化时，重新构建对应的层
+# 如果package.json和源代码一起添加到镜像，则每次修改源码都需要重新安装npm模块
+# 所以，先添加package.json安装npm模块；然后添加源代码
+COPY package.json /app/package.json
+
+# 安装npm依赖(淘宝的镜像源)
+RUN npm i --registry=https://registry.npm.taobao.org
+
+# 拷贝所有源代码到工作目
+COPY . /app
+
+# 允许外界访问容器的7001端口
+EXPOSE 7001
+
+# 启动egg项目
+CMD npm run start
+
+```
+
+2. 构建启动项目
+
 ```bash
 # 进入项目根目录，即Dockerfile文件所在目录
+
 # 构建
 docker build -t egg-demo:v1 .
 
@@ -76,6 +111,7 @@ docker push sinkhaha/egg-demo:v1
 # 拉取sinkhaha/egg-demo:v1镜像，并启动项目
 docker run -d --name=egg-demo1 -v ~/egg-demo/logs:/app/logs -p 8080:7001 --network egg-demo-net sinkhaha/egg-demo:v1
 ```
+
 
 
 # docker-compose方式

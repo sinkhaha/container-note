@@ -1,50 +1,57 @@
+# 项目介绍
+
+docker部署koa项目
+
+
+
 # 项目技术栈
+
 Koa2 + redis
 
 
 
 # 非docker-compose方式启动
 
-## 前提
+### 创建网络(名为koa-demo-net)
 
-此处项目跟redis分别用容器的方式启动，项目需要连接redis，所以要解决容器间通信的问题
+> 因为项目需要连接redis，所以要解决容器间通信的问题：容器共用同一个网络
+>
 
-
-
-1. 创建一个名为`koa-demo-net`的网络
-
-```
+```bash
 docker network create koa-demo-net
 ```
 
-2. docker方式运行redis 在 `koa-demo-net` 网络中，别名`redis`
+### 部署redis
 
-```
+```bash
+# 共享koa-demo-net网络
 docker run -d -p 6379:6379 --name redis --network koa-demo-net --network-alias redis redis:latest
 ```
 
+### 启动项目
 
-
-## 方式一：原始方式启动项目
+1. 项目根目录建立Dockerfile文件
 
 ```bash
-# 进入项目根目录
+FROM node:14
+
+# 复制当前目录的代码到app目录下
+ADD . /app
+
+# 设置容器启动后的默认运行目录
+WORKDIR /app
+
 # 安装依赖
-npm i
+RUN npm install --registry=https://registry.npm.taobao.org
 
-# 启动服务
-node app.js notDocker
-
-# 访问
-http://localhost:8080
-http://localhost:8080/redis
+# 容器启动后执行的命令
+CMD node app.js
 ```
 
-
-## 方式二：构建成镜像启动容器
+2. 构建启动项目
 
 ```bash
-# 项目根目录下新建dockerfile文件 
+# 进入项目根目录，即dockerfile文件所在目录
 
 # 构建镜像  koa-demo为镜像名 v1为版本 .为当前目录
 docker build -t koa-demo:v1 .
@@ -57,12 +64,10 @@ docker build -t koa-demo:v1 .
 #    --net-work指定网络 此处和redis容器是同个网络
 docker run -d -p 8080:8080 --name koa-demo-test  -v /Users/docker-test-volume-dir:/app/log --network koa-demo-net koa-demo:v1
 
-# 访问
+# 测试
 http://localhost:8080
 http://localhost:8080/redis
 ```
-
-
 
 # docker-compose方式启动
 
