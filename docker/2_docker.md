@@ -1,0 +1,705 @@
+# 一、快速上手
+
+## 镜像加速源
+
+| 镜像加速器          | 镜像加速器地址                          |
+| ------------------- | --------------------------------------- |
+| Docker 中国官方镜像 | https://registry.docker-cn.com          |
+| DaoCloud 镜像站     | http://f1361db2.m.daocloud.io           |
+| Azure 中国镜像      | https://dockerhub.azk8s.cn              |
+| 科大镜像站          | https://docker.mirrors.ustc.edu.cn      |
+| 阿里云              | https://<your_code>.mirror.aliyuncs.com |
+| 七牛云              | https://reg-mirror.qiniu.com            |
+| 网易云              | https://hub-mirror.c.163.com            |
+| 腾讯云              | https://mirror.ccs.tencentyun.com       |
+
+
+
+## 例子：安装wordpress
+
+**docker-compose方式安装**
+
+wordpress-docker-compose.yml文件如下
+
+```yaml
+# 参考 https://docs.docker.com/samples/wordpress/
+version: "3.9"
+    
+services:
+  db:
+    image: mysql:5.7
+    volumes:
+      - db_data:/var/lib/mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: somewordpress
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    
+  wordpress:
+    depends_on:
+      - db
+    image: wordpress:latest
+    volumes:
+      - wordpress_data:/var/www/html
+    ports:
+      - "8000:80"
+    restart: always
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+volumes:
+  db_data: {}
+  wordpress_data: {}
+```
+
+```bash
+# 运行 -f指定docker-compose文件，默认是docker-compose.yaml文件
+docker-compose -f wordpress-docker-compose.yaml up -d
+
+# 浏览器访问
+http://localhost:8000
+
+# 停止（不会清除数据库）
+docker-compose -f wordpress-docker-compose.yaml down
+
+# 停止（会清除数据库）
+docker-compose -f wordpress-docker-compose.yaml down --volumes
+```
+
+
+
+## 制作自己的镜像
+
+1. 以[koa-demo]( https://github.com/sinkhaha/container-note/tree/main/docker/koa-demo)项目为例制作镜像
+2. 以[egg-demo](https://github.com/sinkhaha/container-note/tree/main/docker/egg-demo)项目为例制作镜像
+
+
+
+## 目录挂载
+
+容器产生的数据在容器删除后就丢失了，目录挂载可以解决这个问题
+
+
+
+#### 3种挂载方式
+
+- bind mount：把宿主机目录映射到容器内（如挂载配置文件），可存储在宿主机系统的任意位置。可挂到多个容器上
+- volume(官方推荐)：由Docker容器创建和管理，创建在宿主机，所以删除容器不会丢失，适合存储数据库数据。可挂到多个容器上
+- tmpfs mount：适合存储临时文件，存宿主机内存中。不可多容器共享
+
+
+
+#### 挂载实践
+
+以上面[koa-demo](https://github.com/sinkhaha/container-note/tree/main/docker/koa-demo)项目制作的镜像为例，volume方式挂载如下：
+
+```bash
+# 使用koa-demo:v1镜像启动一个koa-demo-test的容器 把宿主主机的/mycode/dir目录挂载到容器的/app目录下
+docker run -d -p 8080:8080 --name koa-demo-test  -v /mycode/dir:/app koa-demo:v1
+```
+
+
+
+## 多容器通信
+
+**多容器通信的解决方式：创建虚拟网络**
+
+
+
+例子：[koa-demo](https://github.com/sinkhaha/container-note/tree/main/docker/koa-demo)项目使用一个容器启动，项目中需要连接redis，redis也使用一个容器启动，项目容器需要根redis容器通信
+
+1. 创建一个名为koa-demo-net的网络
+
+```bash
+docker network create koa-demo-net
+```
+
+2.  启动redis容器，运行于koa-demo-net网络中，别名myredis
+
+```bash
+docker run -d --name redis --network koa-demo-net --network-alias redis redis:latest
+```
+
+3. 启动项目容器
+
+```bash
+# 使用koa-demo:v1镜像启动容器 nerwork也指定同一个网络
+docker run -d -p 8080:8080 --name koa-demo-test  -v /Users/docker-test-volume-dir:/app/log --network koa-demo-net koa-demo:v1
+```
+
+
+
+## Docker-compose使用
+
+1. 安装docker-compose
+
+https://docs.docker.com/compose/install/#install-compose-on-linux-systems
+
+2. 编写docker-compose.yaml
+3. 在docker-compose.yaml目录下运行 `docker-compose up -d` 启动
+
+
+
+## 发布上传镜像
+
+1. [docker hub](https://hub.docker.com/ )注册账号 
+
+2. 本地用命令行登录账号
+
+   ```bash
+   docker login -u <用户名>
+   ```
+
+3. 新建一个tag，名字必须跟注册账号一样
+
+   ```bash
+   docker tag <仓库名>:<tag> <用户名>/<仓库名>:<tag>
+   
+   # 如 docker tag koa-demo:v1 sinkhaha/koa-demo:v1
+   ```
+
+4. 推到docker hub
+
+   ```bash
+   docker push <用户名>/<仓库名>:<tag>
+   
+   # 如 docker push sinkhaha/koa-demo:v1
+   ```
+
+5. 拉取镜像，启动容器
+
+   ```bash
+   # 以sinkhaha/koa-demo:v1镜像启动容器
+   docker run -dp 8080:8080 sinkhaha/koa-demo:v1
+   ```
+
+> Docker 官方提供了 [Docker Registry](https://hub.docker.com/_/registry/) 镜像，可以直接使用做为私有 Registry 服务。还有第三方软件实现了 Docker Registry API，甚至提供了用户界面以及一些高级功能。比如，[Harbor](https://github.com/goharbor/harbor) 和 [Sonatype Nexus]()。
+
+
+
+## 常用命令
+
+**官网命令文档**
+
+https://docs.docker.com/engine/reference/commandline/run/
+
+
+
+**docker命令**
+
+```bash
+docker ps # 查看当前运行中的容器
+docker images # 查看镜像列表
+docker rm container-id # 删除指定 id 的容器
+docker stop/start container-id # 停止/启动指定 id 的容器
+docker rmi image-id # 删除指定 id 的镜像
+docker volume ls # 查看 volume 列表
+docker network ls # 查看网络列表
+```
+
+
+
+**docker-compose命令**
+
+```bash
+docker-compose up -d # 运行，-d表示在后台运行
+docker-compose ps # 查看运行状态
+docker-compose stop # 停止运行
+docker-compose restart # 重启
+docker-compose restart service-name # 重启单个服务
+docker-compose exec service-name sh # 进入容器命令行
+docker-compose logs [service-name] # 查看容器运行log
+```
+
+
+
+## 容器全景图
+
+以下是一个运行egg程序的容器的全景图
+
+
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/docker%E9%A1%B9%E7%9B%AE%E7%BB%93%E6%9E%84%E5%9B%BE.drawio.png)
+
+
+
+1. 这个容器进程“npm run start”，运行在由 Linux Namespace 和 Cgroups 构成的隔离环境里；
+
+   > 它运行所需要的各种文件，以及整个操作系统文件，则由多个联合挂载在一起的 rootfs 层提供
+
+2. 这些 rootfs 层的最下层，是来自 Docker 镜像的只读层
+
+3. 在只读层之上，是 Docker 自己添加的 Init 层，用来存放被临时修改过的 /etc/hosts 等文件
+
+4. 而 rootfs 的最上层是一个可读写层，它以 Copy-on-Write 的方式存放任何对只读层的修改，容器声明的 Volume 的挂载点，也出现在这一层
+
+
+
+# 二、镜像和容器
+
+## 镜像
+
+* Docker镜像相当于是一个 `root` 文件系统
+
+* Docker镜像是一个特殊的`文件系统`，除了提供容器运行时所需的程序、库、资源、配置等文件外，还包含了一些为运行时准备的一些`配置参数（如匿名卷、环境变量、用户等）`
+
+* 镜像不包含任何`动态数据`，其内容在`构建之后也不会被改变`
+
+
+
+## 容器
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220222214541.png)
+
+#### 什么是容器
+
+> 是操作系统在启动进程时通过`设置一些参数`实现了隔离不相关资源后的`一个特殊进程`
+
+
+
+**一个正在运行的docker容器是什么**
+
+> 是一个启用了多个 Linux Namespace 的`应用进程`，而这个进程能够使用的资源量，则`受 Cgroups 配置的限制`
+
+
+
+#### 容器是单进程模型
+
+1. 容器本质上一个进程，单进程不是说只能运行一个进程，而是`只有一个进程是可控的`
+
+2. `用户的应用进程`实际上就是`容器里 PID=1 的进程`，也是其他后续创建的所有进程的`父进程`
+
+   > `容器`和`里面的进程`应该`同生共死，同生命周期`
+
+3. 在容器内，除了pid=1的进程才会被docker控制，其他进程是不受docker控制的（控制指的是它们的回收和生命周期管理）
+
+   > 即 pid=1 的进程挂了 Dockerd 能够感知到，但是其它的进程却不受 Dockerd 的管理，所以其他进程（应用）挂掉时，容器不能感知到。`K8S 的健康检查`可以解决这个问题
+
+
+
+
+
+> 比如，有一个Java Web程序（PID=1）容器，然后执行 docker exec进入容器启动了一个Nginx进程（PID=3）
+>
+> 当Nginx进程异常退出时，如果容器中运行的主进程即Java Web程序(pid=1)没有退出，容器外部的宿主机是无法感知到的Nginx异常的，也没办法对这个Nginx进程的异常退出做相应的处理。
+
+> 因为pid=1的进程是宿主机pid=xxx的进程。当pid为1退出，外部xxx才会跟着退出，释放的资源，操作系统也会回收。
+
+
+
+#### 镜像和容器的关系
+
+镜像和容器的关系，就像是`类`和`实例`的关系，镜像是静态的定义，容器是镜像运行时的实体。
+
+
+
+容器也和镜像一样，使用的分层存储。
+
+
+
+每一个容器运行时，是`以镜像为基础层`，在其上创建一个`当前容器的存储层`，可以称这个为容器运行时读写而准备的存储层为 **容器存储层**。
+
+
+
+注意：容器存储层的`生存周期`和容器一样，容器消亡时，容器存储层也随之消亡。因此，任何保存于容器存储层的信息都会随`容器删除`而丢失。
+
+> 按照 Docker 最佳实践的要求，`容器不应该向其存储层内写入任何数据`，容器存储层要保持无状态化。所有的文件写入操作，都应该使用 `数据卷（Volume）`、或者 `绑定宿主目录`，在这些位置的读写会跳过容器存储层，直接对`宿主（或网络存储）发生读写`，其性能和稳定性更高。
+>
+> 数据卷的生存周期独立于容器，容器消亡，数据卷不会消亡。因此，使用数据卷后，容器删除或者重新运行之后，数据却不会丢失。
+
+
+
+#### 虚拟机和容器
+
+
+
+* 虚拟机
+
+> 真的启动了一个虚拟的环境；（带来了额外的资源消耗和占用）
+>
+> 比如 CPU、内存、I/O 设备等等。然后，它在这些虚拟的硬件上安装了一个新的操作系统，即 Guest OS
+
+* 容器
+
+> 给宿主机上的应用进程打上打namespace的标签；（不需要Guest OS使得容器额外的资源占用几乎可以忽略不计）
+>
+> docker就是一个打这种标签的工具。通过docker也可以分类`管理`这种不同标签的进程
+
+
+
+**虚拟机和容器的对比图**
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20210909213317.png)
+
+* 左边是虚拟机：Hypervisor软件是虚拟机最主要的部分。
+
+  它通过硬件虚拟化功能，模拟出了运行一个操作系统需要的各种硬件（如 CPU、内存、I/O 设备），它在这些虚拟的硬件上安装了一个新的操作系统（Guest OS）。这样用户的应用进程就可以运行在这个虚拟的机器中，它能看到的自然也只有 Guest OS 的文件和目录，以及这个机器里的虚拟设备。
+
+* 右边是容器
+
+  Docker Engine 的软件替换了 Hypervisor。
+
+  用户运行在容器里的应用进程，跟宿主机上的其他进程一样，都由宿主机操作系统统一管理，只不过这些被隔离的进程拥有额外设置过的 Namespace 参数
+
+
+
+**容器与虚拟机对比**
+
+| 特性       | 容器               | 虚拟机     |
+| ---------- | ------------------ | ---------- |
+| 启动       | 秒级               | 分钟级     |
+| 硬件使用   | 一般MB             | 一般GB     |
+| 性能       | 接近原生           | 弱于       |
+| 系统支持量 | 单机支持上千个容器 | 一般几十个 |
+
+
+
+#### 容器优缺点
+
+* 优点
+
+  * 敏捷、高性能
+  * 更有效的利用系统资源
+  * 更快速的启动时间(秒级，甚至毫秒级别)
+  * 一致的运行环境
+  * 更轻松的迁移、扩展和维护
+
+* 缺点
+  
+* 隔离得不彻底
+  
+> 容器只是运行在宿主机上的一种特殊的进程，那么`多个容器`之间使用的就还是`同一个宿主机的操作系统内核`
+  
+* 在 Linux 内核中，有很多资源和对象是`不能被 Namespace 化的`，最典型的例子就是：`时间`
+  
+  > 在生产环境中，没有人敢把运行在物理机上的 Linux 容器`直接暴露到公网上`
+
+
+
+## 容器技术的核心
+
+容器技术的核心：通过`约束（Cgroups技术）`和`修改进程的动态表现（Namespace技术）`，从而为其创造出一个“边界”
+
+1. Cgroups：`限制每个进程拥有的资源`
+
+2. Namespace：`隔离进程，限定边界`
+
+   
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/%E5%AE%B9%E5%99%A8%E6%A0%B8%E5%BF%83%E6%8A%80%E6%9C%AF.png)
+
+
+
+### Namespace机制
+
+##### 例子
+
+**启动一个容器**
+
+```bash
+// 表示启动一个容器，在容器里执行 /bin/sh 程序，并且分配一个命令行终端（-it）跟这个容器交互
+docker run -it busybox /bin/sh
+```
+
+此时宿主机里有一个运行着 `/bin/sh程序` 的容器
+
+
+
+在容器内执行ps 指令
+
+```bash
+ps
+# 输出如下
+PID   USER     TIME  COMMAND
+1 root      0:00 /bin/sh
+8 root      0:00 ps       
+```
+
+* 在容器里，`/bin/sh`是容器的第一个进程(PID=1)
+
+  > Docker把这个/bin/sh程序运行在一个容器时，使得容器内的进程跟宿主主机隔离了。
+  >
+  > 每个 Namespace 里的应用进程，都会认为自己是当前容器里的第 1 号进程，它们既看不到宿主机里真正的进程空间，也看不到其他 PID Namespace 里的具体情况
+
+* 在宿主主机中，`/bin/sh`的真实进程id不一定是1
+
+
+
+##### 容器默认的Namespace
+
+最新的 Docker 项目`默认`会为容器启用的Namespace：
+
+* PID Namespace
+
+* Mount Namespace
+
+  > 用于让被隔离进程只看到当前 Namespace 里的挂载点信息
+
+* UTS Namespace
+
+* IPC Namespace
+
+* Network Namespace
+
+  > 用于让被隔离进程看到当前 Namespace 里的网络设备和配置
+
+* User Namespace
+
+* cgroup
+
+
+
+### Cgroups机制
+
+##### 是什么
+
+Linux Cgroups 全称是 Linux Control Group，是`一个子系统目录` 加上 `一组资源限制文件`的组合
+
+##### 作用
+
+限制一个进程组能够使用的资源上限，包括 `CPU、内存、磁盘、网络带宽`等等
+
+> Cgroups 还能够对进程进行优先级设置、审计，以及将进程挂起和恢复等操作
+
+##### 缺点
+
+* Cgroups 对资源的限制能力也有很多不完善的地方，如` /proc 文件系统的问题`
+
+> Linux 下的 /proc 目录存储的是记录当前内核运行状态的一系列特殊文件，用户可以通过访问这些文件，查看系统以及当前正在运行的进程的信息，比如 CPU 使用情况、内存占用率等，这些文件也是 top 指令查看系统信息的主要数据来源
+
+* 容器中使用 top 等命令看到的CPU和内存等是`宿主机的数据`，而不是当前容器的数据，`lxcfs `可解决此问题
+
+> 在生产环境中，这个问题必须进行修正，否则应用程序在容器里读取到的 CPU 核数、可用内存等信息都是宿主机上的数据，这会给应用的运行带来非常大的困惑和风险
+
+
+
+在 Linux 中，Cgroups 给用户暴露出来的操作接口是文件系统，即它以文件和目录的方式组织在操作系统的 /sys/fs/cgroup 路径下。在 Ubuntu 16.04 可以用 mount 指令把它们展示出来：
+
+```bash
+$ mount -t cgroup 
+cpuset on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)
+cpu on /sys/fs/cgroup/cpu type cgroup (rw,nosuid,nodev,noexec,relatime,cpu)
+cpuacct on /sys/fs/cgroup/cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct)
+blkio on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)
+memory on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)
+...
+```
+
+
+
+**限制容器所占资源的例子**
+
+启动ubuntu容器，命令如下
+
+> 表示在每 100 ms 的时间里，被该控制组限制的进程只能使用 20 ms 的 CPU 时间，也就是说这个进程只能使用到 20% 的 CPU 带宽
+
+```bash
+$ docker run -it --cpu-period=100000 --cpu-quota=20000 ubuntu /bin/bash
+```
+
+* cpu-period：指定CPU period ，默认的 100 ms（100000 us）
+
+* cpu-quota：指定CPU quota，此时是20 ms（20000 us），-1则代表没有限制
+
+这两个参数需要组合使用，可以用来限制进程在长度为cpu-period 的一段时间内，只能被分配到总量为 cpu-quota 的 CPU 时间。
+
+
+
+在启动这个容器后，通过查看 Cgroups 文件系统下，CPU 子系统中，“docker”这个控制组里的资源限制文件的内容来确认：
+
+```bash
+$ cat /sys/fs/cgroup/cpu/docker/5d5c9f67d/cpu.cfs_period_us 
+100000
+$ cat /sys/fs/cgroup/cpu/docker/5d5c9f67d/cpu.cfs_quota_us 
+20000
+```
+
+
+
+**补充：如何修复容器中的 top 指令以及 /proc 文件系统中的信息呢？（提示：lxcfs）？**
+top 是从 /prof/stats 目录下获取数据，所以道理上来讲，容器不挂载宿主机的该目录就可以了。
+
+lxcfs就是来实现这个功能的，做法是`把宿主机的 /var/lib/lxcfs/proc/memoinfo 文件挂载到Docker容器的/proc/meminfo位置后`。容器中进程读取相应文件内容时，LXCFS的FUSE实现会从容器对应的Cgroup中读取正确的内存限制。从而使得应用获得正确的资源约束设定。kubernetes环境下，也能用，以ds 方式运行 lxcfs ，自动给容器注入争取的 proc 信息。
+
+
+
+# 三、深入理解容器镜像
+
+### 容器里的进程看到的文件系统是什么样子？
+
+**Mount Namespace的作用**
+
+1. 解决容器中看到`全新的 目录结构`
+
+2. 跟其他 Namespace 的使用略有不同的地方：
+
+   > 它对容器进程视图的改变，一定是`伴随着挂载操作（mount）才能生效`
+
+3. 可以`隔离文件系统`，生效条件是`在容器启动前重新挂载`，`chroot命令`可以帮助在shell环境挂载，`chroot命令`可以改变进程的根目录到指定的位置
+
+4. 正是基于对 chroot 的不断改良才被发明出来的，它也`是 Linux 操作系统里的第一个 Namespace`
+
+而这个挂载在`容器根目录上`、用来为容器进程提供隔离后执行环境的`文件系统`，就是所谓的“容器镜像”。它还有一个更为专业的名字，叫作：rootfs（根文件系统）。
+
+
+
+一个最常见的 rootfs，或者说容器镜像，会包括如下所示的一些目录和文件，比如 /bin，/etc，/proc 等等：
+
+```shell
+$ ls /
+bin dev etc home lib lib64 mnt opt proc root run sbin sys tmp usr var
+```
+
+而你进入容器之后执行的 /bin/bash，就是`/bin 目录下`的可执行文件，与宿主机的 /bin/bash 完全不同。
+
+
+
+### 容器启动过程
+
+Docker 项目最核心的原理实际上就是为待创建的`用户进程`进行如下操作：(即容器启动过程)
+
+1. 启用 Linux Namespace 配置
+2. 设置指定的 Cgroups 参数
+3. 切换进程的根目录（Change Root）
+
+
+
+### 容器共享宿主主机内核(不同rootfs文件系统)
+
+rootfs 只是一个操作系统所包含的文件、配置和目录，并不包括操作系统内核。
+
+> 在 Linux 操作系统中，这两部分是分开存放的，操作系统只有在开机启动时才会加载指定版本的内核镜像。
+
+实际上，同一台机器上的所有容器，都共享宿主机操作系统的内核，所以在容器内修改内核参数实际上改宿主机内核的参数
+
+
+
+### 容器的一致性
+
+由于 rootfs 的存在，容器才有的重要特性：一致性
+
+
+
+由于 rootfs 里打包的不只是应用，而是整个操作系统的`文件和目录`，意味着，`应用`以及它运行所需要的`所有依赖`，都被封装在了一起
+
+> 对一个应用来说，操作系统本身才是它运行所需要的最完整的“依赖库”
+
+
+
+### 镜像中的layer层
+
+Docker 在镜像的设计中，引入了层（layer）的概念；
+
+即用户制作镜像的每一步操作，都会生成一个层，也就是一个`增量 rootfs`；
+
+> Docker 镜像中的每一层就是一个完整的 rootfs
+
+
+
+### 联合文件系统UnionFS
+
+Union File System 也叫 `UnionFS`，最主要的功能是将多个不同位置的目录联合挂载（union mount）到同一个目录下
+
+> 比如，现在有两个目录 A 和 B，它们分别有两个文件，然后使用联合挂载的方式，将这两个目录挂载到一个公共的目录 C，最后再查看目录 C 的内容，就能看到目录 A 和 B 下的文件被合并到了一起
+
+
+
+Docker 充分利用 `Union FS`的技术，将其设计为`分层存储`的架构。
+
+> 严格来说，镜像并非是像一个 ISO 那样的打包文件，镜像只是一个虚拟的概念，其实际体现并非由一个文件组成，而是由一组文件系统组成，或者说，由`多层文件系统`联合组成
+
+镜像构建时，会`一层层构建`，前一层是后一层的基础。`每一层构建完就不会再发生改变`，后一层上的任何改变只发生在自己这一层。比如，删除前一层文件的操作，实际不是真的删除前一层的文件，而是仅`在当前层标记为该文件已删除`。在最终容器运行的时候，虽然不会看到这个文件，但是实际上该文件会一直跟随镜像。因此，在构建镜像的时候，需要额外小心，`每一层尽量只包含该层需要添加的东西`，任何额外的东西应该在该层构建结束前清理掉
+
+
+
+### 联合文件系统AuFS
+
+AuFS 的全称是 Another UnionFS，后改名为 Alternative UnionFS
+
+>  比如环境是 Ubuntu 16.04 和 Docker CE 18.05，这对组合默认使用的是 AuFS 这个联合文件系统的实现
+
+
+
+# 四、docker命令
+
+### docker exec的原理
+
+docker exec 的实现原理：一个进程可以选择加入到某个进程已有的 Namespace 当中，从而达到“进入”这个进程所在容器
+
+
+
+### docker commit
+
+实际上就是在容器运行起来后，把`最上层的“可读写层”`，加上原先容器镜像的`只读层`，打包组成了一个新的镜像。
+
+当然，下面这些`只读层`在宿主机上是共享的，不会占用额外的空间
+
+> 而由于使用了联合文件系统，你在容器里对镜像 rootfs 所做的任何修改，都会被操作系统先复制到这个可读写层，然后再修改。这就是所谓的：Copy-on-Write。
+
+而正如前所说，Init 层的存在，就是为了避免你执行 docker commit 时，把 Docker 自己对 /etc/hosts 等文件做的修改，也一起提交掉。
+
+
+
+### docker Volume
+
+**问题**
+
+1. 容器里进程新建的文件，怎么才能让宿主机获取到？
+
+2. 宿主机上的文件和目录，怎么才能让容器里的进程访问到？
+
+
+
+**以上两个问题正是 Docker Volume 要解决的问题：**
+
+Volume 机制，允许你将宿主机上指定的目录或者文件，挂载到容器里面进行读取和修改操作
+
+> 如果没有显示声明宿主机目录，那么 Docker 就会默认在宿主机上创建一个临时目录 `/var/lib/docker/volumes/[VOLUME_ID]/_data`
+
+
+
+**两种Volume声明方式**
+
+在 Docker 项目里，它支持两种 Volume 声明方式，可以把宿主机目录挂载进容器的 /test 目录当中：
+
+```bash
+$ docker run -v /test ...
+$ docker run -v /home:/test ...
+```
+
+* 第一种情况下，由于没有显示声明宿主机目录，Docker 就会默认在宿主机上创建一个临时目录 /var/lib/docker/volumes/[VOLUME_ID]/_data，然后把它挂载到容器的 /test 目录上
+* 第二种情况下，Docker 就直接把宿主机的 /home 目录挂载到容器的 /test 目录上
+
+
+
+**Docker 是如何做到把一个宿主机上的目录或者文件，挂载到容器里面去呢？**
+
+当容器进程被创建之后，尽管开启了 Mount Namespace，但是在它执行 chroot（或者 pivot_root）之前，容器进程一直可以看到宿主机上的整个文件系统。
+
+
+
+而宿主机上的文件系统，也自然包括了我们要使用的容器镜像。这个镜像的各个层，保存在 /var/lib/docker/aufs/diff 目录下，在容器进程启动后，它们会被联合挂载在 /var/lib/docker/aufs/mnt/ 目录中，这样容器所需的 rootfs 就准备好了。
+
+
+
+所以，我们只需要在 rootfs 准备好之后，在执行 chroot 之前，把 Volume 指定的宿主机目录（比如 /home 目录），挂载到指定的容器目录（比如 /test 目录）在宿主机上对应的目录（即 /var/lib/docker/aufs/mnt/[可读写层 ID]/test）上，这个 Volume 的挂载工作就完成了。
+
+
+
+由于执行这个挂载操作时，“容器进程”已经创建了，也就意味着此时 Mount Namespace 已经开启了。所以，这个挂载事件只在这个容器里可见。你在宿主机上，是看不见容器内部的这个挂载点的。这就保证了容器的隔离性不会被 Volume 打破。
+
+
+
+而这里要使用到的挂载技术，就是 Linux 的绑定挂载（bind mount）机制。它的主要作用就是，允许你将一个目录或者文件，而不是整个设备，挂载到一个指定的目录上。并且，这时你在该挂载点上进行的任何操作，只是发生在被挂载的目录或者文件上，而原挂载点的内容则会被隐藏起来且不受影响。
+
+
+
+所以，在一个正确的时机，进行一次绑定挂载，Docker 就可以成功地将一个宿主机上的目录或文件，不动声色地挂载到容器中。
+
+
+
+
