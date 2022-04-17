@@ -2,8 +2,7 @@ version: "3.7"
 
 services:
   app:
-    build: ./ # 此时是用本地目录进行构建，如果本地项目已经打包成一个镜像传到仓库，可以改成以下image指定镜像的方式
-    # image: sinkhaha/egg-demo:v1 
+    build: ./ # 此时是用本地目录进行构建，如果本地项目已打包成镜像传到仓库，可以改成镜像的方式，如 image: sinkhaha/egg-demo:v1 
     ports:
       - 8080:7001
     volumes:
