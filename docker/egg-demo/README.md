@@ -74,9 +74,8 @@ docker tag egg-demo:v1 sinkhaha/egg-demo:v1
 docker push sinkhaha/egg-demo:v1
 
 # 拉取sinkhaha/egg-demo:v1镜像，并启动项目
-docker run -dp 8080:7001 sinkhaha/egg-demo:v1
+docker run -d --name=egg-demo1 -v ~/egg-demo/logs:/app/logs -p 8080:7001 --network egg-demo-net sinkhaha/egg-demo:v1
 ```
-
 
 
 # docker-compose方式
