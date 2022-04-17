@@ -1,37 +1,6 @@
 # 项目技术栈
 Egg.js + redis + mongoose
 
-
-## QuickStart
-
-<!-- add docs here for user -->
-
-see [egg docs][egg] for more detail.
-
-### Development
-
-```bash
-$ npm i
-$ npm run dev
-$ open http://localhost:7001/
-```
-
-### Deploy
-
-```bash
-$ npm start
-$ npm stop
-```
-
-### npm scripts
-
-- Use `npm run lint` to check code style.
-- Use `npm test` to run unit test.
-- Use `npm run autod` to auto detect dependencies upgrade, see [autod](https://www.npmjs.com/package/autod) for more detail.
-
-
-[egg]: https://eggjs.org
-
 # docker
 ```bash
 docker network create egg-demo-net
@@ -61,6 +30,17 @@ curl http://localhost:8080
 curl http://localhost:8080/redis
 
 curl http://localhost:8080/mongodb
+
+# 发布到docker hub
+docker login -u <用户名>
+
+# 标记本地egg-demo:v1镜像，将其标记为sinkhaha/egg-demo:v1镜像  sinkhaha为用户名
+docker tag egg-demo:v1 sinkhaha/egg-demo:v1
+
+# 推送sinkhaha/egg-demo:v1镜像到docker hub
+docker push sinkhaha/egg-demo:v1
+
+docker run -dp 8080:7001 sinkhaha/egg-demo:v1
 ```
 
 # docker compose

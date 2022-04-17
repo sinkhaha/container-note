@@ -1,0 +1,47 @@
+version: "3.1"
+
+services:
+  app:
+    build: ./ # 此时是用本地目录进行构建，如果本地项目已经打包成一个镜像传到仓库，可以改成以下image指定镜像的方式
+    # image: sinkhaha/egg-demo:v1 
+    ports:
+      - 8080:7001
+    volumes:
+      -  ~/egg-demo/logs:/app/logs # 挂载日志目录
+    networks:
+      - egg-demo-network
+    environment:
+      - TZ=Asia/Shanghai  
+  redis:
+    image: redis:6.0.14
+    volumes:
+      - redis:/data
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      egg-demo-network:
+        aliases:
+          - mongo
+  mongodb:
+    image: mongo:4.4.13
+    restart: always
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: adming
+      MONGO_INITDB_ROOT_PASSWORD: 123456  
+    networks:
+      egg-demo-network:
+        aliases:
+          - mongo
+volumes:
+  redis:
+  mongo-data:
+  mongo-config:
+
+networks:
+  egg-demo-network:
+    driver: bridge     
