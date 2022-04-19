@@ -2,7 +2,7 @@
 
 Deployment对象实现了一个非常重要的功能：Pod 的“水平扩展 / 收缩”。
 
-> 如果更新了Deployment的Pod模板，那么Deployment就会通过滚动更新的方式来实现现有的容器，它的实现依赖的是：ReplicaSet对象
+> 如果更新了Deployment的Pod模板，Deployment就会通过滚动更新的方式来实现现有的容器
 
 
 
@@ -12,7 +12,7 @@ Deployment对象实现了一个非常重要的功能：Pod 的“水平扩展 / 
 
 
 
-### 例子
+### Deployment对象
 
 如nginx-deployment.yaml
 
@@ -40,7 +40,82 @@ spec:
         - containerPort: 80
 ```
 
-此时Deployment、ReplicaSet、Pod的关系如下
+**1、先创建deployment**
+
+```bash
+$ kubectl create -f nginx-deployment.yaml --record
+```
+
+注意：加了–record参数， 是为了记录下每次操作所执行的命令，以方便后面查看
+
+
+
+**2、检查一下 nginx-deployment 创建后的状态信息**
+
+```bash
+$ kubectl get deployments
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         0         0            0           1s
+```
+
+在返回结果中，四个状态字段的含义如下
+
+1. DESIRED
+
+   > 用户期望的 Pod 副本个数（spec.replicas 的值）
+
+2. CURRENT
+
+   > 当前处于 Running 状态的 Pod 的个数
+
+3. UP-TO-DATE
+
+   > 当前处于最新版本的 Pod 的个数，最新版本指的是 Pod 的 Spec 部分与 Deployment 里 Pod 模板里定义的完全一致
+
+4. AVAILABLE（是用户所期望的最终状态）
+
+   > 当前已经可用的 Pod 的个数，即：既是 Running 状态，又是最新版本，并且已经处于 Ready（健康检查正确）状态的 Pod 的个数
+
+
+
+**3、实时查看Deployment对象的状态变化**
+
+kubectl rollout status命令
+
+```bash
+# 例如查看上面Deployment对象的状态变化
+$ kubectl rollout status deployment/nginx-deployment
+Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
+deployment.apps/nginx-deployment successfully rolled out
+
+# 结果中的“2 out of 3 new replicas have been updated”表示已经有 2 个 Pod 进入了 UP-TO-DATE 状态
+```
+
+等会就看到3个Pod进入到了 AVAILABLE 状态：
+
+```bash
+$ kubectl get deployments
+NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+nginx-deployment   3         3         3            3           20s
+```
+
+
+
+**4、查看一下Deployment所控制的ReplicaSet**
+
+```bash
+$ kubectl get rs
+NAME                          DESIRED   CURRENT   READY   AGE
+nginx-deployment-3167673210   3         3         3       20s
+```
+
+在用户提交了一个 Deployment 对象后，Deployment控制器就会立即创建一个 Pod 副本个数为 3 的 ReplicaSet。这个 ReplicaSet 的名字，则是由 Deployment 的名字和一个随机字符串(pod-template-hash，如此时的3167673210)共同组成。
+
+> ReplicaSet 会把这个随机字符串加在它所控制的所有 Pod 的标签里，从而保证这些 Pod 不会与集群里的其他 Pod 混淆。
+
+
+
+**5、当创建以上Deployment后，Deployment、ReplicaSet、Pod的关系如下**
 
 ![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20210813213259.png)
 
@@ -54,9 +129,9 @@ spec:
   >
   > 
   >
-  > 如果restartPolicy=Never，容器退出了，Pod结束了。为了保证数量，控制器就需要不停启动Pod。可能在任一时刻，Pod数量都不会等于3，这时调整Pod的个数是没有意义的，因为可能永远达不到期望状态。
+  > 如果restartPolicy=Never，容器退出了，Pod结束了。为了保证数量，控制器就需要不停启动Pod。可能在任一时刻，Pod数量都不会达到期望的状态的数量
 
-* 在此基础上，Deployment 同样通过“控制器模式”，来操作 ReplicaSet 的个数和属性，进而实现“水平扩展 / 收缩”和“滚动更新”这两个编排动作
+* Deployment 同样通过“控制器模式”，来操作 ReplicaSet 的个数和属性，进而实现“水平扩展 / 收缩”和“滚动更新”这两个编排动作
 
 
 
@@ -68,7 +143,7 @@ spec:
 
 
 
-ReplicaSet的定义如下所示
+ReplicaSet的定义如下
 
 ```yaml
 apiVersion: apps/v1
@@ -116,88 +191,13 @@ deployment.apps/nginx-deployment scaled
 
 
 
-### 以上面Deployment为例
+### 滚动更新的时机
 
-1. 先创建 nginx-deployment
-
-```bash
-$ kubectl create -f nginx-deployment.yaml --record
-```
-
-> 注意：加了–record 是为了：记录下每次操作所执行的命令，以方便后面查看
-
-2. 检查一下 nginx-deployment 创建后的状态信息
-
-```bash
-$ kubectl get deployments
-NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-nginx-deployment   3         0         0            0           1s
-```
+一旦修改了 Deployment 的 Pod 模板，“滚动更新”就会被`自动`触发。
 
 
 
-**在返回结果中，四个状态字段的含义如下**
-
-1. DESIRED
-
-   > 用户期望的 Pod 副本个数（spec.replicas 的值）
-
-2. CURRENT
-
-   > 当前处于 Running 状态的 Pod 的个数
-
-3. UP-TO-DATE
-
-   > 当前处于最新版本的 Pod 的个数，最新版本指的是 Pod 的 Spec 部分与 Deployment 里 Pod 模板里定义的完全一致
-
-4. AVAILABLE（是用户所期望的最终状态）
-
-   > 当前已经可用的 Pod 的个数，即：既是 Running 状态，又是最新版本，并且已经处于 Ready（健康检查正确）状态的 Pod 的个数
-
-
-
-**实时查看Deployment对象的状态变化**
-
-kubectl rollout status命令
-
-```bash
-$ kubectl rollout status deployment/nginx-deployment
-Waiting for rollout to finish: 2 out of 3 new replicas have been updated...
-deployment.apps/nginx-deployment successfully rolled out
-
-# 结果中的“2 out of 3 new replicas have been updated”表示已经有 2 个 Pod 进入了 UP-TO-DATE 状态
-```
-
-等会就看到3个Pod进入到了 AVAILABLE 状态：
-
-```bash
-NAME               DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
-nginx-deployment   3         3         3            3           20s
-```
-
-
-
-**查看一下这个 Deployment 所控制的 ReplicaSet**
-
-```bash
-$ kubectl get rs
-NAME                          DESIRED   CURRENT   READY   AGE
-nginx-deployment-3167673210   3         3         3       20s
-```
-
-如上所示，在用户提交了一个 Deployment 对象后，Deployment控制器就会立即创建一个 Pod 副本个数为 3 的 ReplicaSet。这个 ReplicaSet 的名字，则是`由 Deployment 的名字和一个随机字符串(pod-template-hash，如此时的3167673210)`共同组成。
-
-> ReplicaSet 会把这个随机字符串加在它所控制的所有 Pod 的标签里，从而保证这些 Pod 不会与集群里的其他 Pod 混淆。
-
-
-
-### **触发滚动更新**
-
-滚动更新的时机：一旦修改了 Deployment 的 Pod 模板，“滚动更新”就会被`自动`触发。
-
-
-
-修改Deployment的方式很多，比如直接使用 `kubectl edit `指令编辑 Etcd 里的 API 对象
+比如直接使用 `kubectl edit `指令编辑 Etcd 里的 API 对象
 
 ```bash
 $ kubectl edit deployment/nginx-deployment
@@ -231,7 +231,7 @@ deployment.extensions/nginx-deployment successfully rolled out
 
 
 
-#### 滚动更新的流程
+### 滚动更新的流程
 
 可以`查看 Deployment 的 Events`，看到这个“滚动更新”的流程：
 
@@ -340,7 +340,7 @@ spec:
 
 
 
-### 触发滚动更新错误停止
+### 触发滚动更新发生错误
 
 这里使用`kubectl set image` 指令，直接修改 nginx-deployment 所使用的镜像
 
