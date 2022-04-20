@@ -333,41 +333,38 @@ No events.
 
 ### 两阶段处理
 
-关于 PV 的“两阶段处理”流程，是靠独立于 kubelet 主控制循环（Kubelet Sync Loop）之外的两个控制循环来实现的。
+PV 的“两阶段处理”流程，是靠独立于 kubelet 主控制循环（Kubelet Sync Loop）之外的两个控制循环来实现的。
 
 
 
 1. “第一阶段”的 Attach（以及 Dettach）操作：AttachDetachController控制
 
-   AttachDetachController控制循环是由 Volume Controller 负责维护的，作用是不断地检查每一个 Pod 对应的 PV，和这个 Pod 所在宿主机之间挂载情况。从而决定，是否需要对这个 PV 进行 Attach（或者 Dettach）操作。
+   > AttachDetachController控制循环是由 Volume Controller 负责维护的，作用是不断地检查每一个 Pod 对应的 PV，和这个 Pod 所在宿主机之间挂载情况。从而决定，是否需要对这个 PV 进行 Attach（或者 Dettach）操作。
 
+   > AttachDetachController运行在 Master 节点上。因为Attach 操作只需要调用公有云或者具体存储项目的 API，并不需要在具体的宿主机上执行操作。
+   >
 
-
-需要注意，作为一个 Kubernetes 内置的控制器，Volume Controller 自然是 kube-controller-manager 的一部分。所以，AttachDetachController 也一定是运行在 `Master 节点`上的。当然，Attach 操作只需要调用公有云或者具体存储项目的 API，并不需要在具体的宿主机上执行操作，所以这个设计没有任何问题。
-
-
+   
 
 2. “第二阶段”的 Mount（以及 Unmount）操作：VolumeManagerReconciler控制
 
-   必须发生`在 Pod 对应的宿主机上`，所以它必须是 kubelet 组件的一部分。这个控制循环叫作：VolumeManagerReconciler，它运行起来之后，是一个独立于 kubelet 主循环的 Goroutine。
+   > VolumeManagerReconciler控制循环必须发生在 Pod 对应的宿主机上，所以它必须是 kubelet 组件的一部分，是一个独立于 kubelet 主循环的 Goroutine。
+   >
+   > 
+   >
+   > 通过这样将 Volume 的处理同 kubelet 的主循环解耦，Kubernetes 就避免了这些`耗时的远程挂载操作`拖慢 kubelet 的主控制循环，进而导致 Pod 的创建效率大幅下降的问题。
+
+   >  kubelet 的一个主要设计原则，就是它的`主控制循环`绝对不可以被 block。
 
 
 
-通过这样将 Volume 的处理同 kubelet 的主循环解耦，Kubernetes 就避免了这些`耗时的远程挂载操作`拖慢 kubelet 的主控制循环，进而导致 Pod 的创建效率大幅下降的问题。
-
-
-
-实际上，kubelet 的一个主要设计原则，就是它的`主控制循环`绝对不可以被 block。
-
-
-
-### 两阶段处理的例子
+### 例子
 
 当一个 Pod 调度到一个节点上之后，kubelet 就要负责为这个 Pod 创建它的 Volume 目录。
 
 
 
-默认情况下，kubelet 为 Volume 创建的目录是如下所示的一个宿主机上的路径：
+默认情况下，kubelet 为 Volume 创建的目录是一个宿主机上的路径，如下：
 
 ```bash
 /var/lib/kubelet/pods/<Pod的ID>/volumes/kubernetes.io~<Volume类型>/<Volume名字>
@@ -379,39 +376,35 @@ kubelet 要做的操作就取决于 Volume 类型
 
 #### **第1阶段 Attach阶段**
 
-##### 如果Volume是远程块存储类型
+**如果Volume是远程块存储类型**
 
 比如 Google Cloud 的 Persistent Disk（GCE 提供的远程磁盘服务）；
 
 
 
-kubelet需要先调用 Goolge Cloud 的 API，将它所提供的 Persistent Disk 挂载到 Pod 所在的宿主机上。
-
-相当于执行：
+kubelet需要先调用 Goolge Cloud 的 API，将它所提供的 Persistent Disk 挂载到 Pod 所在的宿主机上，相当于执行：
 
 ```bash
 $ gcloud compute instances attach-disk <虚拟机名字> --disk <远程磁盘名字>
 ```
 
-这一步为`虚拟机挂载远程磁盘`的操作，对应的正是“两阶段处理”的第一阶段，称为 Attach。
+这一步为虚拟机挂载远程磁盘的操作。
 
 
 
-##### 如果Volume是远程文件存储类型
+**如果Volume是远程文件存储类型**
 
-如果 Volume 类型是远程文件存储（比如 NFS）的话，kubelet 可以跳过“第一阶段”（Attach）的操作，这是因为一般来说，远程文件存储并没有一个“存储设备”需要挂载在宿主机上。
+比如 NFS；
+
+kubelet 可以跳过“第一阶段”（Attach）的操作，因为远程文件存储并没有一个“存储设备”需要挂载在宿主机上。
 
 
 
 #### **第2阶段 Mount阶段**
 
-##### 如果Volume是远程块存储类型
+**如果Volume是远程块存储类型**
 
-Attach 阶段完成后，为了能够使用这个远程磁盘，kubelet 还要进行第二个操作，即：格式化这个磁盘设备，然后将它挂载到宿主机指定的挂载点上。
-
-
-
-这个挂载点正是 Volume 的宿主机目录。这一步相当于执行：
+Attach完成后，为了能够使用这个远程磁盘，kubelet还要进行Mount操作，即：格式化这个磁盘设备，然后将它挂载到Volume的宿主机目录。这一步相当于执行：
 
 ```bash
 # 通过lsblk命令获取磁盘设备ID
@@ -422,15 +415,11 @@ $ sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/
 $ sudo mkdir -p /var/lib/kubelet/pods/<Pod的ID>/volumes/kubernetes.io~<Volume类型>/<Volume名字>
 ```
 
-这个将磁盘设备格式化并挂载到 Volume 宿主机目录的操作，对应的正是“两阶段处理”的第二个阶段，称为：Mount。
-
-
-
 Mount 阶段完成后，这个 Volume 的宿主机目录就是一个“持久化”的目录了，容器在它里面写入的内容，会保存在 Google Cloud 的远程磁盘中。
 
 
 
-##### 如果Volume是远程文件存储类型
+**如果Volume是远程文件存储类型**
 
 kubelet 需要作为 client，将远端 NFS 服务器的目录（比如：“/”目录），挂载到 Volume 的宿主机目录上，
 
@@ -440,20 +429,18 @@ kubelet 需要作为 client，将远端 NFS 服务器的目录（比如：“/�
 $ mount -t nfs <NFS服务器地址>:/ /var/lib/kubelet/pods/<Pod的ID>/volumes/kubernetes.io~<Volume类型>/<Volume名字> 
 ```
 
-通过这个挂载操作，Volume 的宿主机目录就成为了一个远程 NFS 目录的挂载点，后面在这个目录里写入的所有文件，都会被保存在远程 NFS 服务器上。所以，也就完成了对这个 Volume 宿主机目录的“持久化”。
+通过这个挂载操作，Volume 的宿主机目录就成为了一个远程 NFS 目录的挂载点，后面在这个目录里写入的所有文件，都会被保存在远程 NFS 服务器上。
 
 
 
-### Kubernetes是如何定义和区分这两个阶段的
+### k8s是如何定义和区分这两个阶段的
 
-在具体的 Volume 插件的实现接口上，Kubernetes 分别给这两个阶段提供了两种不同的参数列表：
+在具体的 Volume 插件的实现接口上，k8s分别给这两个阶段提供了两种不同的参数列表：
 
-* 对于“第一阶段”（Attach），Kubernetes 提供的可用参数是 nodeName，即宿主机的名字
-* 对于“第二阶段”（Mount），Kubernetes 提供的可用参数是 dir，即 Volume 的宿主机目录
+* 对于“第一阶段”（Attach），k8s 提供的可用参数是 nodeName，即宿主机的名字
+* 对于“第二阶段”（Mount），k8s 提供的可用参数是 dir，即 Volume 的宿主机目录
 
-所以，作为一个存储插件，你只需要根据自己的需求进行选择和实现即可。
-
-
+所以，作为一个存储插件，我们只需要根据自己的需求进行选择和实现即可。
 
 而经过了“两阶段处理”，就得到了一个“持久化”的 Volume 宿主机目录。
 
@@ -467,19 +454,13 @@ $ mount -t nfs <NFS服务器地址>:/ /var/lib/kubelet/pods/<Pod的ID>/volumes/k
 $ docker run -v /var/lib/kubelet/pods/<Pod的ID>/volumes/kubernetes.io~<Volume类型>/<Volume名字>:/<容器内的目标目录> 我的镜像 ...
 ```
 
-以上，就是 Kubernetes 处理 PV 的具体原理了。
 
 
-
-实际上，这个 PV 的处理流程似乎跟 Pod 以及容器的启动流程没有太多的耦合，只要 kubelet 在向 Docker 发起 CRI 请求之前，确保“持久化”的宿主机目录已经处理完毕即可。
-
-
-
-# 二、从本地持久化卷谈起
+# 二、本地持久化卷
 
 ## Local Persistent Volume
 
-Kubernetes 能够直接使用宿主机上的本地磁盘目录，而不依赖于远程存储服务，来提供“持久化”的容器 Volume。
+k8s 能够直接使用宿主机上的本地磁盘目录，而不依赖于远程存储服务，来提供“持久化”的容器 Volume。
 
 
 
@@ -493,70 +474,53 @@ Kubernetes 能够直接使用宿主机上的本地磁盘目录，而不依赖于
 
 **缺点**
 
-1. 一旦这些节点宕机且不能恢复时，Local Persistent Volume 的数据就可能丢失
+一旦这些节点宕机且不能恢复时，Local Persistent Volume 的数据就可能丢失
 
-   > 要求使用 Local Persistent Volume 的应用必须具备数据备份和恢复的能力，允许你把这些数据定时备份在其他位置。
-
-
-
-## Local Persistent Volume的2个设计难点
-
-1. **如何把本地磁盘抽象成 PV**
+> 这些数据可以定时备份在其他位置
 
 
 
-比如，一个 Pod 可以声明使用类型为 Local 的 PV，而这个 PV 其实就是一个 `hostPath 类型的 Volume`。如果这个 hostPath 对应的目录，已经在节点 A 上被事先创建好了。那么，我只需要再给这个 Pod 加上一个 nodeAffinity=nodeA，不就可以使用这个 Volume 了吗？
+**如何把本地磁盘抽象成 PV**
+
+一个 Pod 可以声明使用类型为 Local 的 PV，而这个 PV 其实就是一个 `hostPath 类型的 Volume`。如果这个 hostPath 对应的目录，已经在节点 A 上被事先创建好了。那么，只需要再给这个 Pod 加上一个 nodeAffinity=nodeA，就可以使用这个 Volume 了。
 
 
 
-事实上，你绝不应该把一个`宿主机上的目录`当作 PV 使用。
+一个 Local Persistent Volume 对应的存储介质，一定是一块额外挂载在宿主机的磁盘或者块设备（“额外”的意思是，它不应该是宿主机根目录所使用的主硬盘）。这个原则，可以称为“一个 PV 一块盘”。
 
+> 不要直接把一个宿主机上的目录当作 PV 使用。
+>
 > 因为，这种本地目录的存储行为完全不可控，它所在的磁盘随时都可能被应用写满，甚至造成整个宿主机宕机。而且，不同的本地目录之间也缺乏哪怕最基础的 I/O 隔离机制。
 
 
 
-所以，一个 Local Persistent Volume 对应的存储介质，一定是一块额外挂载在宿主机的磁盘或者块设备（“额外”的意思是，它不应该是宿主机根目录所使用的主硬盘）。这个原则，可以称为“一个 PV 一块盘”。
+**调度器如何保证 Pod 始终能被正确地调度到它所请求的 Local Persistent Volume 所在的节点上呢？**
+
+* 对于常规的 PV ：k8s都是先调度 Pod 到某个节点上，然后，再通过“两阶段处理”来“持久化”这台机器上的 Volume 目录，进而完成 Volume 目录与容器的绑定挂载。
 
 
 
-2. **调度器如何保证 Pod 始终能被正确地调度到它所请求的 Local Persistent Volume 所在的节点上呢？**
+* 对于Local PV：节点上可供使用的磁盘（或者块设备），必须是运维人员提前准备好的。它们在不同节点上的挂载情况可以完全不同，甚至有的节点可以没这种磁盘
 
-
-
-对于常规的 PV 来说，Kubernetes 都是先调度 Pod 到某个节点上，然后，再通过“两阶段处理”来“持久化”这台机器上的 Volume 目录，进而完成 Volume 目录与容器的绑定挂载。
-
-
-
-可是，对于 Local PV 来说，节点上可供使用的磁盘（或者块设备），必须是运维人员提前准备好的。它们在不同节点上的挂载情况可以完全不同，甚至有的节点可以没这种磁盘
-
-
-
-所以，这时，调度器就必须能够知道`所有节点与 Local Persistent Volume 对应的磁盘`的关联关系，然后根据这个信息来调度 Pod。
-
-
-
-这个原则，可以称为“在调度的时候考虑 Volume 分布”。在 Kubernetes 的调度器里，有一个叫作 VolumeBindingChecker 的过滤条件专门负责这个事情。在 Kubernetes v1.11 中，这个过滤条件已经默认开启了。
+> 所以，调度器就必须能够知道 `所有节点与 Local Persistent Volume 对应的磁盘 `的关联关系，然后根据这个信息来调度 Pod。
+>
+> 这个原则，可以称为“在调度的时候考虑 Volume 分布”。在 Kubernetes 的调度器里，有一个叫作 VolumeBindingChecker 的过滤条件专门负责这个事情。在 Kubernetes v1.11 中，这个过滤条件已经默认开启了。
 
 
 
 ## 实践
 
-在开始使用 Local Persistent Volume 之前，你首先需要在集群里配置好磁盘或者块设备。在公有云上，这个操作等同于给虚拟机额外挂载一个磁盘，比如 GCE 的 Local SSD 类型的磁盘就是一个典型例子。
+在开始使用 Local Persistent Volume 之前，需要在集群里配置好磁盘或者块设备，有两种办法来完成这个步骤
+
+1. 给宿主机挂载并格式化一个可用的本地磁盘，这也是最常规的操作
+
+2. 对于实验环境，其实可以在宿主机上挂载几个 RAM Disk（内存盘）来模拟本地磁盘
 
 
 
-而在我们部署的私有环境中，有两种办法来完成这个步骤。
+**下面以第2种方法为例子进行实践**
 
-* 第一种，就是给你的宿主机挂载并格式化一个可用的本地磁盘，这也是最常规的操作
-* 第二种，对于实验环境，其实可以在宿主机上挂载几个 RAM Disk（内存盘）来模拟本地磁盘
-
-
-
-以下以第二种方法为例子进行实践。
-
-
-
-首先，在名叫 node-1 的宿主机上创建一个挂载点，比如 /mnt/disks；然后，用几个 RAM Disk 来模拟本地磁盘，如下所示：
+首先，在名叫node-1的宿主机上创建一个挂载点，比如 /mnt/disks；然后，用几个 RAM Disk 来模拟本地磁盘，如下所示：
 
 ```bash
 # 在node-1上执行
@@ -567,11 +531,11 @@ $ for vol in vol1 vol2 vol3; do
 done
 ```
 
-需要注意的是，如果你希望其他节点也能支持 Local Persistent Volume 的话，那就需要为它们也执行上述操作，并且确保这些磁盘的名字（vol1、vol2 等）都不重复。
+注意：如果希望其他节点也能支持 Local Persistent Volume 的话，那就需要为它们也执行上述操作，并且确保这些磁盘的名字（vol1、vol2 等）都不重复。
 
 
 
-接下来，就可以为这些本地磁盘定义对应的 PV 了，如下所示：
+接下来，为这些本地磁盘定义对应的 PV 了，如下所示：
 
 ```yaml
 apiVersion: v1
@@ -598,11 +562,13 @@ spec:
           - node-1
 ```
 
-可以看到，这个 PV 的定义里：local 字段，指定了它是一个 Local Persistent Volume；而 path 字段，指定的正是这个 PV 对应的本地磁盘的路径，即：/mnt/disks/vol1。
+这个 PV 的定义里：
 
+* local 字段，指定了它是一个 Local Persistent Volume；
 
+* path 字段，指定的正是这个 PV 对应的本地磁盘的路径，即：/mnt/disks/vol1。
 
-这也就意味着如果 Pod 要想使用这个 PV，那它就必须运行在 node-1 上。所以，在这个 PV 的定义里，需要有一个 nodeAffinity 字段指定 node-1 这个节点的名字。这样，调度器在调度 Pod 时，就能够知道一个 PV 与节点的对应关系，从而做出正确的选择。**这正是 Kubernetes 实现“在调度的时候就考虑 Volume 分布”的主要方法。**
+意味着如果 Pod 要想使用这个 PV，那它就必须运行在 node-1 上。所以，在这个 PV 的定义里，需要有一个 nodeAffinity 字段指定 node-1 这个节点的名字。
 
 
 
@@ -617,11 +583,11 @@ NAME         CAPACITY   ACCESS MODES   RECLAIM POLICY  STATUS      CLAIM        
 example-pv   5Gi        RWO            Delete           Available                     local-storage             16s
 ```
 
-可以看到，这个 PV 创建后，进入了 Available（可用）状态。
+这个 PV 创建后，进入了 Available（可用）状态。
 
 
 
-使用 PV 和 PVC 的最佳实践，是你要创建一个 StorageClass 来描述这个 PV，如下所示：
+使用 PV 和 PVC 的最佳实践，是要创建一个 StorageClass 来描述这个 PV，如下所示：
 
 ```yaml
 kind: StorageClass
@@ -632,7 +598,11 @@ provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
 ```
 
-这个 StorageClass 的名字，叫作 local-storage。需要注意的是，在它的 provisioner 字段，我们指定的是 no-provisioner。这是因为 Local Persistent Volume 目前尚不支持 Dynamic Provisioning，所以它没办法在用户创建 PVC 的时候，就自动创建出对应的 PV。也就是说，我们前面创建 PV 的操作，是不可以省略的。
+这个 StorageClass 的名字，叫作 local-storage。
+
+需要注意的是，在它的 provisioner 字段，指定的是 no-provisioner。
+
+> 这是因为 Local Persistent Volume 目前尚不支持 Dynamic Provisioning，所以它没办法在用户创建 PVC 的时候，就自动创建出对应的 PV。也就是说，我们前面创建 PV 的操作，是不可以省略的。
 
 
 
@@ -640,51 +610,35 @@ volumeBindingMode: WaitForFirstConsumer
 
 
 
-**延迟绑定**
+### 延迟绑定
 
-当你提交了 PV 和 PVC 的 YAML 文件之后，Kubernetes 就会根据它们俩的属性，以及它们指定的 StorageClass 来进行绑定。只有绑定成功后，Pod 才能通过声明这个 PVC 来使用对应的 PV。
+当提交了 PV 和 PVC 的 YAML 文件之后，k8s就会根据它们俩的属性，以及它们指定的 StorageClass 来进行绑定。只有绑定成功后，Pod 才能通过声明这个 PVC 来使用对应的 PV。
 
-
-
-可是，如果你使用的是 Local Persistent Volume 的话，就会发现，这个流程根本行不通。
+> 可是，如果使用的是 Local Persistent Volume 的话，这个流程根本行不通，需要推迟这个“绑定”操作
 
 
 
-比如，现在你有一个 Pod，它声明使用的 PVC 叫作 pvc-1。并且，我们规定，这个 Pod 只能运行在 node-2 上。
+#### 为什么要延迟绑定
 
-而在 Kubernetes 集群中，有两个属性（比如：大小、读写权限）相同的 Local 类型的 PV。
+1. 现在有一个 Pod，它声明使用的 PVC 叫作 pvc-1。并且，我们规定这个 Pod 只能运行在 node-2 上。
 
+2. 而在 k8s 集群中，有两个属性（比如：大小、读写权限）相同的 Local 类型的 PV
 
+3. 其中，第一个 PV 的名字叫作 pv-1，它对应的磁盘所在的节点是 node-1。而第二个 PV 的名字叫作 pv-2，它对应的磁盘所在的节点是 node-2。
 
-其中，第一个 PV 的名字叫作 pv-1，它对应的磁盘所在的节点是 node-1。而第二个 PV 的名字叫作 pv-2，它对应的磁盘所在的节点是 node-2。
+4. 假设现在，k8s 的 Volume 控制循环里，首先检查到了 pvc-1 和 pv-1 的属性是匹配的，于是就将它们俩绑定在一起
 
+5. 然后，你用 kubectl create 创建了这个 Pod
 
+6. 这时，问题就出现了。调度器看到，这个 Pod 所声明的 pvc-1 已经绑定了 pv-1，而 pv-1 所在的节点是 node-1，根据“调度器必须在调度时考虑 Volume 分布”的原则，这个 Pod 自然会被调度到 node-1 上，但是前面已经规定过，这个Pod只允许运行在 node-2 上。所以最后的结果是，这个 Pod 的调度必然会失败。
 
-假设现在，Kubernetes 的 Volume 控制循环里，首先检查到了 pvc-1 和 pv-1 的属性是匹配的，于是就将它们俩绑定在一起。
-
-
-
-然后，你用 kubectl create 创建了这个 Pod。
-
-这时候，问题就出现了。
+**所以在使用Local Persistent Volume时，要推迟这个“绑定”操作，推迟到调度的时候**
 
 
 
-调度器看到，这个 Pod 所声明的 pvc-1 已经绑定了 pv-1，而 pv-1 所在的节点是 node-1，根据“调度器必须在调度的时候考虑 Volume 分布”的原则，这个 Pod 自然会被调度到 node-1 上。
+#### 怎么做
 
-
-
-可是，我们前面已经规定过，这个 Pod 根本不允许运行在 node-1 上。所以。最后的结果就是，这个 Pod 的调度必然会失败。
-
-
-
-**这就是为什么，在使用 Local Persistent Volume 的时候，我们必须想办法推迟这个“绑定”操作。具体推迟到什么时候呢？**
-
-**答案是：推迟到调度的时候。**
-
-
-
-所以说，StorageClass 里的 volumeBindingMode=WaitForFirstConsumer 的含义，就是告诉 Kubernetes 里的 Volume 控制循环（“红娘”）：虽然你已经发现这个 StorageClass 关联的 PVC 与 PV 可以绑定在一起，但请不要现在就执行绑定操作（即：设置 PVC 的 VolumeName 字段）。
+StorageClass 里的 volumeBindingMode=WaitForFirstConsumer 的含义，就是告诉 Kubernetes 里的 Volume 控制循环（“红娘”）：虽然你已经发现这个 StorageClass 关联的 PVC 与 PV 可以绑定在一起，但请不要现在就执行绑定操作（即：设置 PVC 的 VolumeName 字段）。
 
 
 
@@ -708,14 +662,16 @@ volumeBindingMode: WaitForFirstConsumer
 
 
 
-在明白了这个机制之后，就可以创建 StorageClass 了，如下所示：
+### 实践过程
+
+在明白了延迟绑定机制后，就可以创建 StorageClass 了，如下所示：
 
 ```bash
 $ kubectl create -f local-sc.yaml 
 storageclass.storage.k8s.io/local-storage created
 ```
 
-接下来，我们只需要定义一个非常普通的 PVC，就可以让 Pod 使用到上面定义好的 Local Persistent Volume 了，如下所示：
+接下来，定义一个非常普通的 PVC，就可以让 Pod 使用到上面定义好的 Local Persistent Volume 了，如下所示：
 
 ```yaml
 kind: PersistentVolumeClaim
@@ -731,11 +687,11 @@ spec:
   storageClassName: local-storage
 ```
 
-可以看到，这个 PVC 没有任何特别的地方。唯一需要注意的是，它声明的 storageClassName 是 local-storage。所以，将来 Kubernetes 的 Volume Controller 看到这个 PVC 的时候，不会为它进行绑定操作。
+可以看到，这个 PVC 没有任何特别的地方。唯一需要注意的是，它声明的 storageClassName 是 local-storage。所以，将来k8s 的 Volume Controller 看到这个 PVC 时，不会为它进行绑定操作。
 
 
 
-现在，我们来创建这个 PVC：
+现在，创建这个 PVC：
 
 ```bash
 $ kubectl create -f local-pvc.yaml 
@@ -746,11 +702,11 @@ NAME                  STATUS    VOLUME    CAPACITY   ACCESS MODES   STORAGECLASS
 example-local-claim   Pending                                       local-storage   7s
 ```
 
-可以看到，尽管这个时候，Kubernetes 里已经存在了一个可以与 PVC 匹配的 PV，但这个 PVC 依然处于 Pending 状态，也就是等待绑定的状态。
+可以看到，尽管这时，k8s 里已经存在了一个可以与 PVC 匹配的 PV，但这个 PVC 依然处于 Pending 状态，也就是等待绑定的状态。
 
 
 
-然后，我们编写一个 Pod 来声明使用这个 PVC，如下所示：
+然后，编写一个 Pod 来声明使用这个 PVC，如下所示：
 
 ```yaml
 kind: Pod
@@ -773,11 +729,11 @@ spec:
           name: example-pv-storage
 ```
 
-这个 Pod 没有任何特别的地方，你只需要注意，它的 volumes 字段声明要使用前面定义的、名叫 example-local-claim 的 PVC 即可。
+这个 Pod 没有任何特别的地方，只需要注意，它的 volumes 字段声明要使用前面定义的、名叫 example-local-claim 的 PVC 即可。
 
 
 
-而我们一旦使用 kubectl create 创建这个 Pod，就会发现，我们前面定义的 PVC，会立刻变成 Bound 状态，与前面定义的 PV 绑定在了一起，如下所示：
+而我们一旦使用 kubectl create 创建这个 Pod，就会发现，前面定义的 PVC，会立刻变成 Bound 状态，与前面定义的 PV 绑定在了一起，如下所示：
 
 ```bash
 $ kubectl create -f local-pod.yaml 
@@ -788,11 +744,11 @@ NAME                  STATUS    VOLUME       CAPACITY   ACCESS MODES   STORAGECL
 example-local-claim   Bound     example-pv   5Gi        RWO            local-storage   6h
 ```
 
-也就是说，在我们创建的 Pod 进入调度器之后，“绑定”操作才开始进行。
+也就是说，在创建的 Pod 进入调度器之后，“绑定”操作才开始进行。
 
 
 
-这时候，我们可以尝试在这个 Pod 的 Volume 目录里，创建一个测试文件，比如：
+这时候，可以尝试在这个 Pod 的 Volume 目录里，创建一个测试文件，比如：
 
 ```bash
 $ kubectl exec -it example-pv-pod -- /bin/sh
@@ -824,7 +780,7 @@ $ kubectl exec -it example-pv-pod -- /bin/sh
 
 
 
-**需要注意的是，我们上面手动创建 PV 的方式，即 Static 的 PV 管理方式，在删除 PV 时需要按如下流程执行操作：**
+**需要注意的是，上面手动创建 PV 的方式，即 Static 的 PV 管理方式，在删除 PV 时需要按如下流程执行操作：**
 
 1. 删除使用这个 PV 的 Pod
 2. 从宿主机移除本地磁盘（比如，umount 它）
@@ -835,7 +791,7 @@ $ kubectl exec -it example-pv-pod -- /bin/sh
 
 
 
-当然，由于上面这些创建 PV 和删除 PV 的操作比较繁琐，Kubernetes 其实提供了一个 Static Provisioner 来帮助你管理这些 PV。
+当然，由于上面这些创建 PV 和删除 PV 的操作比较繁琐，k8s 其实提供了一个 Static Provisioner 来帮助你管理这些 PV。
 
 
 
