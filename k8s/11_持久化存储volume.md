@@ -64,6 +64,14 @@ spec:
       storage: 1Gi
 ```
 
+在这个 PVC 对象里，没有任何关于 Volume 细节的字段，只有描述性的属性和定义。比如
+
+* storage: 1Gi，表示想要的 Volume 大小至少是 1 GiB
+
+* accessModes: ReadWriteMany，表示这个Volume 的挂载方式是可读写，并且能被挂载在多个节点上
+
+  > AccessMode的类型可以查看 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
+
 
 
 ## PVC绑定PV

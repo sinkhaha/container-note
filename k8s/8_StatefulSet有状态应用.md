@@ -307,123 +307,11 @@ Address 1: 10.244.2.8
 
 # 存储状态
 
-## PVC
+## 存储状态的管理
 
-Persistent Volume Claim（PVC）和 Persistent Volume（PV）的 API 对象
+**PVC和PV 的设计，使得StatefulSet对存储状态的管理成为了可能**
 
-> 声明和使用持久化 Volume
-
-
-
-## 使用 Volume的例子
-
-**第一步：定义一个 PVC，声明想要的 Volume 的属性**
-
-```yaml
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: pv-claim
-spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-```
-
-在这个 PVC 对象里，不需要任何关于 Volume 细节的字段，只有描述性的属性和定义。比如
-
-* storage: 1Gi，表示想要的 Volume 大小至少是 1 GiB
-
-* accessModes: ReadWriteOnce，表示这个 Volume 的挂载方式是可读写，并且只能被挂载在一个节点上而非被多个节点共享
-
-> 关于哪种类型的 Volume 支持哪种类型的 AccessMode，可以查看 Kubernetes 项目官方文档中的详细列表。https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
-
-
-
-**第二步：在应用的 Pod 中，声明使用这个 PVC**
-
-```yaml
- apiVersion: v1
-kind: Pod
-metadata:
-  name: pv-pod
-spec:
-  containers:
-    - name: pv-container
-      image: nginx
-      ports:
-        - containerPort: 80
-          name: "http-server"
-      volumeMounts:
-        - mountPath: "/usr/share/nginx/html"
-          name: pv-storage
-  volumes:
-    - name: pv-storage
-      persistentVolumeClaim:
-        claimName: pv-claim # 使用
-```
-
-在这个 Pod 的 Volumes 定义中，只需要声明它的类型是 persistentVolumeClaim，然后指定 PVC 的名字，而完全不必关心 Volume 本身的定义。
-
-
-
-这时只要创建这个 PVC 对象，Kubernetes 就会自动为它绑定一个`符合条件的 Volume`。
-
-
-
-### Volume从哪里来
-
-**这些符合条件的 Volume 是从哪里来的呢？**
-
-> 它们来自于由运维人员维护的 PV（Persistent Volume）对象
-
-
-
-一个常见的 PV 对象的 YAML 文件：
-
-```yaml
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: pv-volume
-  labels:
-    type: local
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteOnce
-  rbd:
-    monitors:
-    # 使用 kubectl get pods -n rook-ceph 查看 rook-ceph-mon- 开头的 POD IP 即可得下面的列表
-    - '10.16.154.78:6789'
-    - '10.16.154.82:6789'
-    - '10.16.154.83:6789'
-    pool: kube
-    image: foo
-    fsType: ext4
-    readOnly: true
-    user: admin
-    keyring: /etc/ceph/keyring
-```
-
-storage声明了这个 PV 的容量是 10 GiB。这样，Kubernetes 就会为我们刚刚创建的 PVC 对象绑定这个 PV。
-
-
-
-**所以，Kubernetes 中 PVC 和 PV 的设计，实际上类似于“接口”和“实现”的思想**
-
-* 开发者只要知道并会使用“接口”，即：PVC
-
-* 而运维人员则负责给“接口”绑定具体的实现，即：PV
-
-
-
-**而 PVC、PV 的设计，也使得 StatefulSet 对存储状态的管理成为了可能**
-
-以上面用到的 StatefulSet 为例
+> PVC和PV可参考另一章的内容
 
 ```yaml
 apiVersion: apps/v1
@@ -450,7 +338,7 @@ spec:
         volumeMounts:
         - name: www
           mountPath: /usr/share/nginx/html
-  volumeClaimTemplates:
+  volumeClaimTemplates: # pvc的模板
   - metadata:
       name: www
     spec:
@@ -461,30 +349,19 @@ spec:
           storage: 1Gi
 ```
 
-这个 StatefulSet 额外添加了一个 volumeClaimTemplates 字段，它跟 Deployment 里 Pod 模板（PodTemplate）的作用类似
+这个 StatefulSet添加了一个 volumeClaimTemplates 字段，它跟 Deployment 里 Pod 模板（PodTemplate）的作用类似
 
-> 凡是被这个 StatefulSet 管理的 Pod，都会声明一个对应的 PVC；而这个 PVC 的定义，就来自于 volumeClaimTemplates 这个模板字段。更重要的是，这个 PVC 的名字，会被分配一个与这个 Pod 完全一致的编号
-
-
+> 凡是被这个 StatefulSet 管理的 Pod，都会声明一个对应的 PVC；
+>
+> 而这个 PVC 的定义，就来自于 volumeClaimTemplates 这个模板字段。
+>
+> 更重要的是，这个 PVC 的名字，会被分配一个与这个 Pod 完全一致的编号
 
 这个自动创建的 PVC，与 PV 绑定成功后，就会进入 Bound 状态，这就意味着这个 Pod 可以挂载并使用这个 PV 了。
 
 
 
-**PVC 其实就是一种特殊的 Volume**
-
-> 只不过一个 PVC 具体是什么类型的 Volume，要在跟某个 PV 绑定之后才知道
-
-
-
-**PVC 与 PV 的绑定得以实现的前提**
-
-* 是运维人员已经在系统里创建好了符合条件的 PV（比如，我们在前面用到的 pv-volume）
-* 或者，你的 Kubernetes 集群运行在公有云上，这样 Kubernetes 就会通过 Dynamic Provisioning 的方式，自动为你创建与 PVC 匹配的 PV
-
-
-
-所以，在创建了 StatefulSet 之后，就会看到 Kubernetes 集群里出现了两个 PVC：
+所以，在创建了 StatefulSet 之后，会看到k8s集群里出现了两个 PVC：
 
 ```bash
 $ kubectl create -f statefulset.yaml
@@ -504,7 +381,7 @@ www-web-1   Bound     pvc-15c79307-b507-11e6-932f-42010a800002   1Gi        RWO 
 
 
 
-使用如下所示的指令，在 Pod 的 Volume 目录里写入一个文件，来验证一下上述 Volume 的分配情况
+使用如下所示的命令，在 Pod 的 Volume 目录里写入一个文件，来验证一下上述 Volume 的分配情况
 
 ```bash
 $ for i in 0 1; do kubectl exec web-$i -- sh -c 'echo hello $(hostname) > /usr/share/nginx/html/index.html'; done
@@ -514,7 +391,7 @@ $ for i in 0 1; do kubectl exec web-$i -- sh -c 'echo hello $(hostname) > /usr/s
 
 
 
-此时，如果你在这个 Pod 容器里访问“http://localhost”，你实际访问到的就是 Pod 里 Nginx 服务器进程，而它会为你返回 /usr/share/nginx/html/index.html 里的内容。这个操作的执行方法如下所示：
+此时，如果在这个 Pod 容器里访问“http://localhost”，你实际访问到的就是 Pod 里 Nginx 服务器进程，而它会为你返回 /usr/share/nginx/html/index.html 里的内容。这个操作的执行方法如下所示：
 
 ```bash
 $ for i in 0 1; do kubectl exec -it web-$i -- curl localhost; done
@@ -522,7 +399,7 @@ hello web-0
 hello web-1
 ```
 
-如果你使用 kubectl delete 命令删除这两个 Pod，这些 Volume 里的文件会不会丢失呢？
+如果使用 kubectl delete 命令删除这两个 Pod，这些 Volume 里的文件会不会丢失呢？
 
 ```bash
 $ kubectl delete pod -l app=nginx
@@ -530,7 +407,7 @@ pod "web-0" deleted
 pod "web-1" deleted
 ```
 
-可以看到，在被删除之后，这两个 Pod 会被按照编号的顺序被重新创建出来。而这时候，如果你在新创建的容器里通过访问“http://localhost”的方式去访问 web-0 里的 Nginx 服务：
+可以看到，在被删除之后，这两个 Pod 会被按照编号的顺序被重新创建出来。而这，如果在新创建的容器里通过访问“http://localhost”的方式去访问 web-0 里的 Nginx 服务：
 
 ```bash
 # 在被重新创建出来的Pod容器里访问http://localhost
@@ -568,11 +445,11 @@ hello web-0
 
 
 
-**通过这种方式，Kubernetes 的 StatefulSet 就实现了对应用存储状态的管理。**
+**通过这种方式，k8s 的 StatefulSet 就实现了对应用存储状态的管理。**
 
 
 
-### StatefulSet的工作原理
+## StatefulSet的工作原理
 
 **StatefulSet 的工作原理**
 
