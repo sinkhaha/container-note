@@ -7,7 +7,7 @@
 
 
 
-# Service实现原理
+## Service实现原理
 
 实际上，Service是由` kube-proxy 组件`，加上 `iptables `来共同实现的。
 
@@ -17,7 +17,7 @@
 
 
 
-当创建 service 后， `API Service` 会监听service ，然后把service信息写入etcd ，`kube-proxy` 会监听etcd中 service的信息，并且将service信息转发成对应的访问规则。
+创建service 后， `API Service` 会监听service ，然后把service信息写入etcd ，`kube-proxy` 也会监听etcd中 service的信息，并且将service信息转成对应的访问规则。
 
 ![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/service_kube-proxy.drawio%20(1).png)
 
@@ -25,7 +25,7 @@
 
 ## kube-proxy支持3种代理模式
 
-### userspace用户空间
+### userspace-用户空间
 
 在该模式下 `kube-proxy` 会为每一个 `service` 创建一个监听端口，发送给 `CluseterIP` 请求会被 `iptable` 重定向给 `kube-proxy` 监听的端口上，其中 `kube-proxy` 会根据 `LB` 算法将请求转发到相应的pod之上。
 
@@ -35,13 +35,15 @@
 
 ![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/username.drawio.png)
 
-**优点**
+**优点：**
 
 稳定
 
+
+
 **缺点：**
 
-在进行转发处理时候增加内核和用户空间之间的数据拷贝，所以效率非常低
+在进行转发处理时增加内核和用户空间之间的数据拷贝，所以效率非常低
 
 
 
@@ -59,13 +61,33 @@ iptables模式下 `kube-proxy` 为每一个pod创建相对应的 `iptables` 规�
 
 **缺点：**
 
-在该模式下 `kube-proxy` 不承担负载均衡器的角色，其只会负责创建相应的转发策略，因为不能提供灵活的LB策略，当后端Pod不可用的时候无法进行重试
+1. 在该模式下 `kube-proxy` 不承担负载均衡器的角色，其只会负责创建相应的转发策略，因为不能提供灵活的LB策略，当后端Pod不可用的时候无法进行重试
 
+2. kube-proxy 通过 iptables 处理 Service 的过程，其实需要在宿主机上设置相当多的 iptables 规则。而且，kube-proxy 还需要在控制循环里不断地刷新这些规则来确保它们始终是正确的。当你的宿主机上有大量 Pod 时，成百上千条 iptables 规则不断地被刷新，会大量占用该宿主机的 CPU 资源，甚至会让宿主机“卡”在这个过程中。所以，**基于 iptables 的 Service 实现，都是制约k8s项目承载更多量级的 Pod 的主要障碍。**
 
+   
 
 **实践例子**
 
-对于上面创建的名叫 hostnames 的 Service 来说，一旦它被提交给k8s，那么 kube-proxy 就可以通过 Service 的 Informer 感知到这样一个 Service 对象的添加。
+创建如下ClusterIP类型的service:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hostnames
+spec:
+  selector:
+    app: hostnames # 这个Service只代理携带了 app=hostnames 标签的Pod
+  type: ClusterIP  
+  ports:
+  - name: default
+    protocol: TCP
+    port: 80
+    targetPort: 9376 # 这个service的80端口代理Pod的9376端口
+```
+
+创建上面的service后，一旦它被提交给k8s，那么 kube-proxy 就可以通过 Service 的 Informer 感知到这样一个 Service 对象的添加。
 
 而作为对这个事件的响应，它会在宿主机上`创建这样一条 iptables 规则`（可以通过 iptables-save 看到它），如下所示：
 
@@ -79,7 +101,9 @@ iptables模式下 `kube-proxy` 为每一个pod创建相对应的 `iptables` 规�
 
 
 
-而前面已经看到，10.0.1.175 正是这个 Service 的 VIP。所以这一条规则，`就为这个Service设置了一个固定的入口地址`。并且，由于 10.0.1.175 只是一条 iptables 规则上的配置，并没有真正的网络设备，所以你 ping 这个地址，是不会有任何响应的。
+而前面已经看到，10.0.1.175 正是这个 Service 的 VIP。所以这一条规则，`就为这个Service设置了一个固定的入口地址`。
+
+> 并且，由于 10.0.1.175 只是一条 iptables 规则上的配置，并没有真正的网络设备，所以你 ping 这个地址，是不会有任何响应的。
 
 
 
@@ -134,7 +158,7 @@ iptables模式下 `kube-proxy` 为每一个pod创建相对应的 `iptables` 规�
 
 
 
-这样，访问 Service VIP 的 IP 包经过上述 iptables 处理之后，就已经变成了访问具体某一个后端 Pod 的 IP 包了。这些 Endpoints 对应的 iptables 规则，正是 kube-proxy 通过监听 Pod 的变化事件，在宿主机上生成并维护的。
+这样，访问 Service VIP 的IP包经过上述 iptables 处理之后，就已经变成了访问具体某一个后端 Pod 的 IP 包了。这些 Endpoints 对应的 iptables 规则，正是 kube-proxy 通过监听 Pod 的变化事件，在宿主机上生成并维护的。
 
 
 
@@ -146,9 +170,7 @@ ipvs模式与iptable模式类型， `kube-proxy` 会根据pod的变化创建相�
 
 
 
-kube-proxy 通过 iptables 处理 Service 的过程，其实需要在宿主机上设置相当多的 iptables 规则。而且，kube-proxy 还需要在控制循环里不断地刷新这些规则来确保它们始终是正确的。
-
-当你的宿主机上有大量 Pod 时，成百上千条 iptables 规则不断地被刷新，会大量占用该宿主机的 CPU 资源，甚至会让宿主机“卡”在这个过程中。所以说，**一直以来，基于 iptables 的 Service 实现，都是制约k8s项目承载更多量级的 Pod 的主要障碍。**而 IPVS 模式的 Service，就是解决这个问题的一个行之有效的方法。
+IPVS模式可以解决iptables模式下当有大量Pod需要刷新大量iptables规则的缺点。
 
 > 使用ipvs模式必须安装ipvs内核模块，否则会自动降级为iptables
 
@@ -173,7 +195,7 @@ ipvs相对iptable来说转发效率更加高效，同时提供了大量的负载
 
 **实践例子**
 
-**IPVS 模式的工作原理，跟 iptables 模式类似**
+**IPVS模式的工作原理，跟 iptables 模式类似**
 
 当创建了前面的 Service 之后，kube-proxy 首先会在宿主机上创建一个虚拟网卡（叫作：kube-ipvs0），并为它分配 Service VIP 作为 IP 地址，如下所示：
 
@@ -247,7 +269,7 @@ ipvs相对iptable来说转发效率更加高效，同时提供了大量的负载
 
 
 
-但如果你为 Pod 指定了 Headless Service，并且 Pod 本身声明了 hostname 和 subdomain 字段，那么这时 Pod 的 A 记录就会变成：<pod的hostname>...svc.cluster.local，比如：
+但如果为 Pod 指定了 Headless Service，并且 Pod 本身声明了 hostname 和 subdomain 字段，那么这时 Pod 的 A 记录就会变成：<pod的hostname>...svc.cluster.local，比如：
 
 ```yaml
 apiVersion: v1
@@ -714,7 +736,7 @@ spec:
 
 此时需要区分到底是 Service 本身的配置问题，还是集群的 DNS 出了问题？
 
-1. 一个有效的方法，就是检查 Kubernetes 自己的` Master 节点的 Service DNS `是否正常
+1. 检查 k8s 自己的` Master 节点的 Service DNS `是否正常
 
 ```bash
 # 在一个Pod里执行
@@ -739,8 +761,6 @@ hostnames   10.244.0.5:9376,10.244.0.6:9376,10.244.0.7:9376
 ```
 
 注意：如果 Pod 的 readniessProbe 没通过，它也不会出现在 Endpoints 列表里。
-
-
 
 4. 而如果 Endpoints 正常，那么就需要确认 kube-proxy 是否在正确运行。
 
@@ -800,9 +820,9 @@ UP BROADCAST RUNNING PROMISC MULTICAST  MTU:1460  Metric:1
 
 ## 什么是Ingress
 
-**所谓 Ingress，就是 Service 的“Service”。**
+**Ingress，就是 Service 的“Service”。**
 
-Ingress是k8s内置的一个`全局的负载均衡器`，可以替代LoadBalancer类型的service。通过用户访问的URL，把请求转发给不同的后端 Service。这种全局的、为了代理不同后端 Service 而设置的负载均衡服务，就是k8s里的 Ingress 服务。
+Ingress是k8s内置的一个`全局的负载均衡器`，可以替代LoadBalancer类型的service。通过用户访问URL，把请求转发给不同的后端 Service。这种全局的、为了代理不同后端 Service 而设置的负载均衡服务，就是k8s里的 Ingress 服务。
 
 > LoadBalancer类型的Service，它会在Cloud Provider（比如：Google Cloud 或者 OpenStack）里创建一个与该 Service 对应的负载均衡服务。
 >
@@ -810,7 +830,7 @@ Ingress是k8s内置的一个`全局的负载均衡器`，可以替代LoadBalance
 
 
 
-实际上 Ingress 类似于一个七层的负载均衡器，是由 K8S 对反向代理的抽象，其工作原理类似于 Nginx 可以理解为Ingress里面建立了诸多映射规则，Ingress Controller通过监听这些配置规则并转化为Nginx的反向代理配置，然后对外提供服务。
+实际上 Ingress 类似于一个七层的负载均衡器，是由 K8S 对反向代理的抽象，其工作原理类似于 Nginx ，可以理解为Ingress里面建立了诸多映射规则，Ingress Controller通过监听这些配置规则并转化为Nginx的反向代理配置，然后对外提供服务。
 
 - Ingress: k8s中的一个对象，作用是定义请求如何转发到Service的规则。
 - Ingress Controller:具体实现反向代理及负载均衡的程序，对Ingress定义的规则进行解析，根据配置的规则来实现请求转发，实现的方式有很多，比如Nginx，Contour，Haproxy等。
@@ -828,7 +848,9 @@ Ingress是k8s内置的一个`全局的负载均衡器`，可以替代LoadBalance
 
 
 
-举个例子，假如有这样一个站点：https://cafe.example.com。
+举例：
+
+假如有这样一个站点：https://cafe.example.com。
 
 其中，https://cafe.example.com/coffee，对应的是“咖啡点餐系统”。
 
@@ -838,11 +860,11 @@ Ingress是k8s内置的一个`全局的负载均衡器`，可以替代LoadBalance
 
 
 
+## Ingress定义例子
+
 **如何能使用k8s的 Ingress 来创建一个统一的负载均衡器，从而实现当用户访问不同的域名时，能够访问到不同的 Deployment 呢？**
 
 
-
-## Ingress定义例子
 
 上述功能，在k8s里就需要通过 Ingress 对象来描述，如下cafe-ingress.yaml 文件所示：
 
@@ -920,7 +942,7 @@ IngressRule 的 Key，就叫做：host。
 
 ### 实践
 
-以最常用的 Nginx Ingress Controller 为例，在我们前面用 kubeadm 部署的 Bare-metal 环境中，实践一下 Ingress 机制的使用过程。
+以最常用的 Nginx Ingress Controller 为例，实践一下 Ingress 机制的使用过程。
 
 
 
@@ -1002,11 +1024,11 @@ spec:
               containerPort: 443
 ```
 
-在上述 YAML 文件中，定义了一个使用 nginx-ingress-controller 镜像的 Pod。
+文件定义了一个使用 nginx-ingress-controller 镜像的 Pod。
 
 
 
-需要注意的是，这个 Pod 的启动命令需要使用该 Pod 所在的 Namespace 作为参数。而这个信息，当然是通过 Downward API 拿到的，即：Pod 的 env 字段里的定义（env.valueFrom.fieldRef.fieldPath）。
+注意：这个 Pod 的启动命令需要使用该 Pod 所在的 Namespace 作为参数。而这个信息，当然是通过 Downward API 拿到的，即：Pod 的 env 字段里的定义（env.valueFrom.fieldRef.fieldPath）。
 
 
 
@@ -1020,7 +1042,7 @@ spec:
 
 而一旦 Ingress 对象被更新，nginx-ingress-controller 就会更新这个配置文件。
 
-需要注意的是，如果这里只是被代理的 Service 对象被更新，nginx-ingress-controller 所管理的 Nginx 服务是不需要重新加载（reload）的。这当然是因为 nginx-ingress-controller 通过Nginx Lua方案实现了 Nginx Upstream 的动态配置。
+注意：如果这里只是被代理的 Service 对象被更新，nginx-ingress-controller 所管理的 Nginx 服务是不需要重新加载（reload）的。这当然是因为 nginx-ingress-controller 通过Nginx Lua方案实现了 Nginx Upstream 的动态配置。
 
 
 
@@ -1038,7 +1060,7 @@ spec:
 $ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/baremetal/service-nodeport.yaml
 ```
 
-由于我们使用的是 Bare-metal 环境，所以 service-nodeport.yaml 文件里的内容，就是一个 NodePort 类型的 Service，如下所示：
+service-nodeport.yaml 文件里的内容，是一个 NodePort 类型的 Service，如下所示：
 
 ```yaml
 apiVersion: v1
@@ -1180,7 +1202,7 @@ Request ID: 32191f7ea07cb6bb44a1f43b8299415c
 
 #### 问题
 
-**如果我的请求没有匹配到任何一条 IngressRule，那么会发生什么呢？**
+**如果我的请求没有匹配到任何一条 IngressRule，会发生什么？**
 
 首先，既然 Nginx Ingress Controller 是用 Nginx 实现的，那么它当然会为你返回一个 Nginx 的 404 页面。
 
