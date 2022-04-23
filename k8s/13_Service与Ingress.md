@@ -3,7 +3,7 @@
 ## 为什么要Service
 
 1. Pod的IP不是固定的
-2. 一组Pod实例之间会有负载均衡的需求
+2. 一组Pod实例之间会有负载均衡的需求（Label selector）
 
 
 
@@ -103,11 +103,23 @@ hostnames-bvc05
 
 # Service实现原理
 
-## iptables模式
-
 实际上，Service 是由` kube-proxy 组件`，加上 `iptables `来共同实现的。
 
+kube-proxy支持三种代理模式: 用户空间、iptables、IPVS
 
+## Userspace用户空间
+
+当创建 `Service` 时，Kubernetes master 会给它指派一个虚拟 IP 地址，比如 10.0.0.1。 假设 `Service` 的端口是 80，该 `Service` 会被集群中所有的 `kube-proxy` 实例观察到。
+
+当代理看到一个新的 `Service`， 它会打开一个新的端口，建立一个从该 VIP 重定向到新端口的 iptables，并开始接收请求连接。
+
+当一个客户端连接到一个 VIP，iptables 规则开始起作用，它会重定向该数据包到 `Service代理` 的端口。 `Service代理` 选择一个Pod，并将客户端的流量代理到Pod上。
+
+这意味着 `Service` 的所有者能够选择任何他们想使用的端口，而不存在冲突的风险。 客户端可以简单地连接到一个 IP 和端口，而不需要知道实际访问了哪些 `Pod`。
+
+
+
+## iptables模式
 
 **例子**
 
@@ -315,7 +327,7 @@ spec:
 
 
 
-# 3种从k8s集群外访问Service的方法
+# k8s支持的4种Service
 
 **注意：Service的访问信息在k8s集群之外，其实是无效的。**
 
@@ -327,11 +339,19 @@ spec:
 
 
 
-所以，在使用Service时，一个必须要面对和解决的问题就是：
+## 第1种：ClusterIP
+
+
+
+
+
+这种类型的service 只能在集群内访问。
+
+
+
+
 
 **如何从外部（k8s 集群之外），访问到 k8s 里创建的 Service？有如下3种方式**
-
-
 
 ## 第1种：NodePort类型Service
 
@@ -1023,3 +1043,8 @@ Request ID: 32191f7ea07cb6bb44a1f43b8299415c
 
 这样，任何匹配失败的请求，就都会被转发到这个名叫 nginx-default-backend 的 Service。所以，你就可以通过部署一个专门的 Pod，来为用户返回自定义的 404 页面了。
 
+
+
+参考
+
+https://zhuanlan.zhihu.com/p/157565821
