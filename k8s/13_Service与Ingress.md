@@ -2,124 +2,62 @@
 
 ## 为什么要Service
 
-1. Pod的IP不是固定的
+1. Pod的IP不是固定的，对一组pod进行聚合，并且提供一个统一的外部接口地址
 2. 一组Pod实例之间会有负载均衡的需求（Label selector）
-
-
-
-## ClusterIP模式Service示例
-
-1、定义Deployment先创建3个Pod，如下所示：
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: hostnames
-spec:
-  selector:
-    matchLabels:
-      app: hostnames
-  replicas: 3
-  template:
-    metadata:
-      labels:
-        app: hostnames
-    spec:
-      containers:
-      - name: hostnames
-        image: k8s.gcr.io/serve_hostname
-        ports:
-        - containerPort: 9376
-          protocol: TCP
-```
-
-这个pod的作用是每次访问 9376 端口时，返回它自己的 hostname
-
-
-
-2、创建如下Service（ClusterIP模式）
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: hostnames
-spec:
-  selector:
-    app: hostnames # 这个Service只代理携带了 app=hostnames 标签的Pod
-  ports:
-  - name: default
-    protocol: TCP
-    port: 80
-    targetPort: 9376 # 这个service的80端口代理Pod的9376端口
-```
-
-
-
-### Endpoints
-
-被selector选中的Pod，称为` Service 的 Endpoints`。
-
-
-
-使用kubectl get ep查看：
-
-```bash
-$ kubectl get endpoints hostnames
-NAME        ENDPOINTS
-hostnames   10.244.0.5:9376,10.244.0.6:9376,10.244.0.7:9376
-```
-
-注意：只有处于 Running 状态，且 readinessProbe 检查通过的 Pod，才会出现在 Service 的 Endpoints 列表里。并且，当某一个 Pod 出现问题时，k8s会自动把它从 Service 里摘除掉。
-
-
-
-此时，通过该 Service 的 VIP 地址 10.0.1.175，就可以访问到它所代理的 Pod 了。
-
-> 这个VIP 地址是 k8s 自动为 Service 分配的
->
-
-```bash
-# 查看名为hostnames的service的信息
-$ kubectl get svc hostnames
-NAME        TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
-hostnames   ClusterIP   10.0.1.175   <none>        80/TCP    5s
-
-# 集群内访问
-$ curl 10.0.1.175:80
-hostnames-0uton
-
-$ curl 10.0.1.175:80
-hostnames-yp2kp
-
-$ curl 10.0.1.175:80
-hostnames-bvc05
-```
-
-通过3次连续不断地访问 Service 的 VIP 地址和代理端口 80，它依次返回了三个 Pod 的 hostname。 Service 提供的是 Round Robin 方式的负载均衡，这种方式，称为：`ClusterIP 模式的 Service`。
 
 
 
 # Service实现原理
 
-实际上，Service 是由` kube-proxy 组件`，加上 `iptables `来共同实现的。
-
-kube-proxy支持三种代理模式: 用户空间、iptables、IPVS
-
-## Userspace用户空间
-
-当创建 `Service` 时，Kubernetes master 会给它指派一个虚拟 IP 地址，比如 10.0.0.1。 假设 `Service` 的端口是 80，该 `Service` 会被集群中所有的 `kube-proxy` 实例观察到。
-
-当代理看到一个新的 `Service`， 它会打开一个新的端口，建立一个从该 VIP 重定向到新端口的 iptables，并开始接收请求连接。
-
-当一个客户端连接到一个 VIP，iptables 规则开始起作用，它会重定向该数据包到 `Service代理` 的端口。 `Service代理` 选择一个Pod，并将客户端的流量代理到Pod上。
-
-这意味着 `Service` 的所有者能够选择任何他们想使用的端口，而不存在冲突的风险。 客户端可以简单地连接到一个 IP 和端口，而不需要知道实际访问了哪些 `Pod`。
+实际上，Service是由` kube-proxy 组件`，加上 `iptables `来共同实现的。
 
 
 
-## iptables模式
+每个节点都运行一个 `kube-proxy` 服务进程，它是真正起到转发数据作用。
+
+
+
+当创建 `service` 后， `API Service` 会监听 `service` ，然后把service信息写入 `etcd` ，`kube-proxy` 会监听 `etcd` 中 `service` 的信息并且将 `service` 信息转发成对应的访问规则。
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/service_kube-proxy.drawio%20(1).png)
+
+
+
+
+
+## kube-proxy支持三种代理模式
+
+### userspace用户空间
+
+当创建 `Service` 时，Kubernetes master 会给它指派一个virtual IP 地址(比如 10.0.0.1)， 假设 `Service` 的端口是 80，该 `Service` 会被集群中所有的 `kube-proxy` 实例监听到，kube-proxy会打开一个新的端口，建立一个从该 VIP 重定向到新端口的 iptables，并开始接收请求连接。
+
+
+
+当一个客户端连接到一个 VIP，iptables 规则开始起作用，它会重定向该数据包到 `Service代理` 的端口。 Service 选择一个Pod，并将客户端的流量代理到Pod上。
+
+这意味着 `Service` 的所有者能够选择任何他们想使用的端口，而不存在冲突的风险。 
+
+
+
+在该模式下 `kube-proxy` 会为每一个 `service` 创建一个监听端口,发送给 `Cluseter IP` 请求会被 `iptable` 重定向给 `kube-proxy` 监听的端口上,其中 `kube-proxy` 会根据 `LB` 算法将请求转发到相应的pod之上。
+
+
+
+该模式下，kube-proxy充当了一个四层负载均衡器的角色。由于kube-proxy运行在userspace中，在进行转发处理的时候会增加内核和用户空间之间的数据拷贝，虽然比较稳定，但是效率非常低下。
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/username.drawio.png)
+
+
+
+### iptables模式
+
+iptables模式下 `kube-proxy` 为每一个pod创建相对应的 `iptables` 规则,发送给 `ClusterIP` 的请求会被直接发送给后端pod之上。
+
+在该模式下 `kube-proxy` 不承担负载均衡器的角色,其只会负责创建相应的转发策略,该模式的优点在于较userspace模式效率更高,但是不能提供灵活的LB策略，当后端Pod不可用的时候无法进行重试。
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/iptables.drawio.png)
+
+
 
 **例子**
 
@@ -196,13 +134,30 @@ kube-proxy支持三种代理模式: 用户空间、iptables、IPVS
 
 
 
-## IPVS模式
+### IPVS模式
 
-此外，k8s的kube-proxy还支持一种叫作 IPVS 的模式。
+ipvs模式与iptable模式类型, `kube-proxy` 会根据pod的变化创建相应的 `ipvs` 转发规则,ipvs相对iptable来说转发效率更加高效,同时提供了大量的负责均衡算法。
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/ipvx.drawio.png)
 
 
 
 其实，可以看到，kube-proxy 通过 iptables 处理 Service 的过程，其实需要在宿主机上设置相当多的 iptables 规则。而且，kube-proxy 还需要在控制循环里不断地刷新这些规则来确保它们始终是正确的。
+
+> 使用ipvs模式必须安装ipvs内核模块,否则会自动降级为iptables
+
+```bash
+# 编辑配置文件 搜索43行mode将其修改为ipvs
+kubectl edit cm kube-proxy -n kube-system
+
+# 删除原有的代理
+ kubectl delete pod -l k8s-app=kube-proxy -n kube-system
+
+# 查看
+ ipvsadm -Ln
+```
+
+
 
 
 
@@ -339,9 +294,68 @@ spec:
 
 
 
+参考：
+
+https://zhuanlan.zhihu.com/p/157565821
+
+https://www.cnblogs.com/SR-Program/p/15574213.html
+
+
+
 ## 第1种：ClusterIP
 
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/clusterIP.drawio%20(1).png)
 
+1、定义Deployment先创建3个Pod，如下所示：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hostnames
+spec:
+  selector:
+    matchLabels:
+      app: hostnames
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: hostnames
+    spec:
+      containers:
+      - name: hostnames
+        image: k8s.gcr.io/serve_hostname
+        ports:
+        - containerPort: 9376
+          protocol: TCP
+```
+
+这个pod的作用是每次访问 9376 端口时，返回它自己的 hostname
+
+
+
+2、创建如下Service（ClusterIP模式）
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hostnames
+spec:
+  selector:
+    app: hostnames # 这个Service只代理携带了 app=hostnames 标签的Pod
+  type: ClusterIP  
+  # clusterIP: 10.244.5.1 # service IP地址，如果不写默认会生成一个
+  # sessionAffinity: ClientIP # 修改分发策略为基于客户端地址的会话保持模式
+  ports:
+  - name: default
+    protocol: TCP
+    port: 80
+    targetPort: 9376 # 这个service的80端口代理Pod的9376端口
+```
+
+使用 `kuebctl get svc` 可以查看service的信息。
 
 
 
@@ -349,11 +363,106 @@ spec:
 
 
 
+### Endpoints
+
+被selector选中的Pod，称为` Service 的 Endpoints`。
+
+
+
+Endpoint是k8s中的一个资源对象，存储在etcd中，用来记录一个service对应的所有Pod的访问地址，它是根据service配置文件中的selector描述产生的。
+
+一个service由一组Pod组成，这些Pod通过Endpoints暴露出来，Endpoints是实现实际服务的端点集合。换言之，service和Pod之间的联系是通过Endpoints实现的。
+
+
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/endpoint.drawio.png)
+
+
+
+
+
+使用kubectl get ep查看：
+
+```bash
+$ kubectl get endpoints hostnames
+NAME        ENDPOINTS
+hostnames   10.244.0.5:9376,10.244.0.6:9376,10.244.0.7:9376
+```
+
+注意：只有处于 Running 状态，且 readinessProbe 检查通过的 Pod，才会出现在 Service 的 Endpoints 列表里。并且，当某一个 Pod 出现问题时，k8s会自动把它从 Service 里摘除掉。
+
+
+
+此时，通过该 Service 的 VIP 地址 10.0.1.175，就可以访问到它所代理的 Pod 了。
+
+> 这个VIP 地址是 k8s 自动为 Service 分配的
+
+```bash
+# 查看名为hostnames的service的信息
+$ kubectl get svc hostnames
+NAME        TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+hostnames   ClusterIP   10.0.1.175   <none>        80/TCP    5s
+
+# 集群内任意一个节点访问
+$ curl 10.0.1.175:80
+hostnames-0uton
+
+$ curl 10.0.1.175:80
+hostnames-yp2kp
+
+$ curl 10.0.1.175:80
+hostnames-bvc05
+```
+
+通过3次连续不断地访问 Service 的 VIP 地址和代理端口 80，它依次返回了三个 Pod 的 hostname。 Service 提供的是 Round Robin 方式的负载均衡，这种方式，称为：`ClusterIP 模式的 Service`。
+
+
+
+#### 负载分发策略
+
+对Service的访问被分发到了后端的Pod上去，目前k8s提供了两种负载分发策略：
+
+- 如果不定义，默认使用kube-proxy的策略，比如随机、轮询等。
+- 基于客户端地址的会话保持模式，即来自同一个客户端发起的所有请求都会转发到固定的一个Pod上，这对于传统基于Session的认证项目来说很友好，此模式可以在spec中添加`sessionAffinity: ClusterIP`选项。
+
+
+
+
+
+### **Headless Service**
+
+在某些场景中，开发人员可能不想使用Service提供的负载均衡功能，而希望自己来控制负载均衡策略，针对这种情况，k8s提供了HeadLinesss Service，这类Service不会分配Cluster IP，如果想要访问Service，只能通过Service的域名进行查询。
+
+
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hostnames
+spec:
+  selector:
+    app: hostnames # 这个Service只代理携带了 app=hostnames 标签的Pod
+  type: ClusterIP  
+  clusterIP: None # 将clusterIP设置为None，即可创建headliness Service
+  ports:
+  - name: default
+    protocol: TCP
+    port: 80
+    targetPort: 9376 # 这个service的80端口代理Pod的9376端口
+```
+
 
 
 **如何从外部（k8s 集群之外），访问到 k8s 里创建的 Service？有如下3种方式**
 
-## 第1种：NodePort类型Service
+## 第2种：NodePort类型Service
+
+NodePort service会将service 的端口与 node 的端口进行映射,当我们访问 node 的 `IP + Port` 即为访问 service 所对应的资源。
+
+
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/nodeport.drawio.png)
 
 ### API定义
 
@@ -476,7 +585,7 @@ spec:
 
 
 
-## 第2种：LoadBalancer类型的Service
+## 第3种：LoadBalancer类型的Service
 
 从外部访问 Service 的第二种方式，适用于公有云上的 Kubernetes 服务。
 
@@ -504,9 +613,19 @@ spec:
 
 在上述 LoadBalancer 类型的 Service 被提交后，k8s 就会调用 CloudProvider 在公有云上为你创建一个`负载均衡服务`，并且把被代理的 Pod 的 IP 地址配置给负载均衡服务做后端。
 
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220423183632.png)
 
 
-## 第3种：ExternalName类型的Service
+
+## 第4种：ExternalName类型的Service
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220423184059.png)
+
+
+
+ExternalName类型的Service用于引入集群外部的服务，它通过externalName属性指定一个服务的地址，然后在集群内部访问此Service就可以访问到外部的服务了。
+
+
 
 ### API定义
 
@@ -690,6 +809,26 @@ LoadBalancer 类型的 Service，它会在Cloud Provider（比如：Google Cloud
 
 
 **如何能使用k8s的 Ingress 来创建一个统一的负载均衡器，从而实现当用户访问不同的域名时，能够访问到不同的 Deployment 呢？**
+
+
+
+
+
+实际上 Ingress 类似于一个七层的负载均衡器,是由 K8S 对反向代理的抽象,其工作原理类似于 Nginx 可以理解为Ingress里面建立了诸多映射规则，Ingress Controller通过监听这些配置规则并转化为Nginx的反向代理配置，然后对外提供服务。
+
+- Ingress:kubernetes中的一个对象，作用是定义请求如何转发到Service的规则。
+- Ingress Controller:具体实现反向代理及负载均衡的程序，对Ingress定义的规则进行解析，根据配置的规则来实现请求转发，实现的方式有很多，比如Nginx，Contour，Haproxy等。
+- 其工作原理如下
+  - 用户编写 Ingress 规则说明那个域名对应那个 service
+  - Ingress Contoller 动态感知 ingress 编写的规则,然后生成对应的反向代理规则
+  - ingress 控制器会根据生成代理规则写入到代理服务中
+  - 客户端请求代理服务,由代理服务转发到后端 pod 节点
+
+
+
+![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220423184736.png)
+
+
 
 
 
@@ -1048,3 +1187,5 @@ Request ID: 32191f7ea07cb6bb44a1f43b8299415c
 参考
 
 https://zhuanlan.zhihu.com/p/157565821
+
+https://www.cnblogs.com/SR-Program/p/15574213.html
