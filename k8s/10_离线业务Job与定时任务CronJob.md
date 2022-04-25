@@ -91,11 +91,11 @@ Events:
   1m           1m          1        {job-controller }                Normal      SuccessfulCreate  Created pod: pi-rq5rl
 ```
 
-在创建后，Pod模板和Job对象本身，都自动加上了名为 `controller-uid=< 一个随机字符串 > `的 Label，是为了保证了 Job 与它所管理的 Pod 之间的匹配关系，也避免不同Job对象所管理的 Pod 发生重合。
+在创建后，Pod模板和Job对象本身，都自动加上了名为 `controller-uid=<一个随机字符串> `的 Label，是为了保证了Job与它所管理的Pod之间的匹配关系，也避免不同Job对象所管理的Pod发生重合。
 
 
 
-3. 这个 Job 创建的 Pod 进入了 Running 状态，意味着它在计算 Pi 的值
+3. 这个Job创建的Pod进入了Running状态，意味着它在计算 Pi 的值
 
 ```bash
 $ kubectl get pods
@@ -111,13 +111,13 @@ NAME                                READY     STATUS      RESTARTS   AGE
 pi-rq5rl                            0/1       Completed   0          4m
 ```
 
-离线计算的 Pod 永远都不应该被重启，否则会再重新计算一遍，所以在 Pod 模板中定义 restartPolicy=Never 
+离线计算的Pod永远都不应该被重启，否则会再重新计算一遍，所以在Pod模板中定义 restartPolicy=Never 
 
 >  在Job对象，restartPolicy只允许被设置为Never和OnFailure
 >
 > 在Deployment对象，restartPolicy只允许被设置为Always
 
-5. 用kubectl logs 查看一下这个 Pod 的日志，可以看到输出了计算得到的 Pi 值
+5. 用kubectl logs查看一下这个Pod的日志，可以看到输出了计算得到的 Pi 值
 
 ```bash
 $ kubectl logs pi-rq5rl
@@ -128,13 +128,13 @@ $ kubectl logs pi-rq5rl
 
 ## 离线作业失败的处理
 
-1. 当Pod的restartPolicy=Nerver时，离线任务失败后Job控制器会不断重新创建一个新的Pod
+1. 当Pod的restartPolicy=Nerver时，离线任务失败后Job控制器会不断`重新创建一个新的Pod`
 
    > 这个的重试次数是spec.backoffLimit字段配置（在上面Job对象定义了spec.backoffLimit=4，即重试次数为 4，其默认值是 6），重新创建 Pod 的间隔是呈指数增加的，即下一次重新创建 Pod 的动作会分别发生在 10 s、20 s、40 s …
 
 
 
-2.  当Pod的restartPolicy=OnFailure时，离线任务失败后Job控制器会不断重启Pod里的容器，而不会去重新创建一个新的Pod
+2.  当Pod的restartPolicy=OnFailure时，离线任务失败后Job控制器会`不断重启Pod里的容器`，而不会去重新创建一个新的Pod
 
 
 
@@ -154,7 +154,7 @@ spec:
  activeDeadlineSeconds: 100
 ```
 
-一旦运行超过了 100 s，这个 Job 的所有 Pod 都会被终止。并且可以在 Pod 的状态里看到终止的原因是 DeadlineExceeded
+一旦运行超过了 100 s，这个 Job 的所有 Pod 都会被终止。并且可以在 Pod 的状态里看到终止的原因是 DeadlineExceeded。
 
 
 
@@ -454,7 +454,7 @@ exit
 
 # 定时任务CronJob
 
-CronJob 描述的是定时任务
+CronJob描述的是定时任务
 
 
 
@@ -462,7 +462,7 @@ CronJob 描述的是定时任务
 
 ```yaml
 apiVersion: batch/v1beta1
-kind: CronJob # CronJob累心
+kind: CronJob # CronJob类型
 metadata:
   name: hello
 spec:
@@ -482,7 +482,7 @@ spec:
           restartPolicy: OnFailure
 ```
 
-CronJob 与 Job 的关系，如同 Deployment 与 ReplicaSet 的关系，CronJob是一个专门用来管理 Job 对象的控制器。
+**CronJob与Job的关系，如同Deployment与ReplicaSet的关系，CronJob是一个专门用来管理 Job 对象的控制器。**
 
 
 
