@@ -2,7 +2,7 @@
 
 ## 什么是Pod
 
-Pod就是对容器的进一步抽象和封装。它对容器进行了组合，添加了更多的属性和字段。
+Pod是对容器的进一步抽象和封装。它对容器进行了组合，添加了更多的属性和字段。
 
 > Docker容器类似集装箱，Pod类似给集装箱增加了吊环，使得k8s这台吊车更好操作(通过控制器Controller完成)
 
@@ -14,7 +14,7 @@ Pod就是对容器的进一步抽象和封装。它对容器进行了组合，�
 
 ## 亲密关系容器
 
-有亲密关系的容器才放在同一个pod中。
+有亲密关系的容器才要放在同一个pod中。
 
 
 
@@ -39,19 +39,17 @@ Pod是通过Infra中间容器实现的，它是一个永远处于"暂停"状态�
 
 #### **Infra容器和用户容器的关系**
 
-**在Pod 中**
+1. 在Pod中，Infra容器是第一个被创建的容器
 
-1. Infra 容器：第一个被创建的容器
+2. 在Pod中，用户定义的容器是通过 `Join Network Namespace `的方式，与Infra容器关联在一起
 
-2. 用户定义的容器：通过 `Join Network Namespace `的方式，与 Infra 容器关联在一起
+   > Infra容器创建Network Namespace和Volume Namespace 后，用户容器就可以加入到 Infra 容器的 Network Namespace 当中。所以，查看同一Pod的容器在宿主机上的Network Namespace 文件，它们指向的值一定是完全一样的
 
-   > Infra 容器创建Network Namespace和Volume Namespace 后，用户容器就可以加入到 Infra 容器的 Network Namespace 当中。所以，查看同一Pod的容器在宿主机上的 Namespace 文件，它们指向的值一定是完全一样的
-
-3. 同一个 Pod 里的所有用户容器的`进出流量，也可以认为都是通过 Infra 容器完成的`
+3. 同一个Pod里的所有用户容器的进出流量，也可以认为都是通过Infra容器完成的
 
 
 
-如下图这个 Pod 里有两个用户容器 A 和 B，还有一个 Infra 容器
+如下图这个Pod里有2个用户容器 A 和 B，还有1个Infra容器：
 
 
 
@@ -59,27 +57,26 @@ Pod是通过Infra中间容器实现的，它是一个永远处于"暂停"状态�
 
 
 
-**对于 Pod 里的容器 A 和容器 B 来说：**
+**对于Pod里的容器A和容器B：**
 
 1. 它们可以直接使用 `localhost `进行通信
 
 2. 它们看到的`网络设备`跟 Infra 容器看到的完全一样
 
-3. `一个 Pod 只有一个 IP 地址`，也就是这个 Pod 的 Network Namespace 对应的 IP 地址
+3. `一个Pod只有一个 IP 地址`，也就是这个 Pod 的 Network Namespace 对应的 IP 地址
 
 4. 其他的所有`网络资源`，都是一个 Pod 一份，并且被该 `Pod 中的所有容器共享`
 
-5. Pod 的生命周期只跟 Infra 容器一致，而与容器A 和 容器B 无关
+5. Pod 的生命周期只跟 Infra 容器一致，而与 容器A 和 容器B 无关
 
-   
+
+
 
 **共享Volume：**
 
-一个 Volume 对应的宿主机目录对于 Pod 来说只有一个，Pod 里的容器只要声明挂载这个 Volume，就一定可以共享这个 Volume 对应的宿主机目录。
+一个Volume对应的宿主机目录对于Pod来说只有一个，Pod里的容器只要声明挂载这个 Volume，就一定可以共享这个 Volume 对应的宿主机目录。
 
-
-
-比如下面的例子：
+例如：
 
 ```yaml
 apiVersion: v1
@@ -96,12 +93,12 @@ spec:
   - name: nginx-container
     image: nginx
     volumeMounts:
-    - name: shared-data
+    - name: shared-data # 挂载shared-data存储卷
       mountPath: /usr/share/nginx/html
   - name: debian-container
     image: debian
     volumeMounts:
-    - name: shared-data
+    - name: shared-data # 挂载shared-data存储卷
       mountPath: /pod-data
     command: ["/bin/sh"]
     args: ["-c", "echo Hello from the debian container > /pod-data/index.html"]
@@ -115,7 +112,7 @@ spec:
 
 # 二、容器设计模式
 
-没有Pod时，用户想在一个容器跑多个不相关的应用时，需要考虑怎么去处理比较好；有了Pod之后，用户只需要考虑放到同一个Pod中，其他的东西交给Pod处理，相当于抽象出了一种设计模式
+没有Pod时，用户想在一个容器跑多个不相关的应用时，需要考虑怎么去处理比较好；有了Pod之后，用户只需要考虑放到同一个Pod中，其他的东西交给Pod处理，相当于抽象出了一种设计模式。
 
 
 
@@ -179,48 +176,49 @@ spec:
 
 **文件中定义了两个容器**
 
-1. 第一个容器使用的镜像是 geektime/sample:v2，这个镜像里只有一个 WAR 包（sample.war）放在根目录下
+1. 第一个容器使用的是geektime/sample:v2镜像，这个镜像里只有一个 WAR 包（sample.war）放在根目录下
 
-   > 注意：WAR 包容器是一个 Init Container 类型的容器
+   > 注意：WAR包容器是一个 Init Container 类型的容器
 
    > WAR 包容器启动后，执行`"cp /sample.war /app"`，把应用的 WAR 包拷贝到 /app 目录下，然后退出。最后这个 /app 目录，挂载了一个名叫 app-volume 的 Volume。
 
-2. 第二个容器则使用的是一个标准的 Tomcat 镜像
+2. 第二个容器使用的Tomcat镜像
 
-   > Tomcat 容器同样声明了挂载 app-volume 到自己的 webapps 目录下。所以等Tomcat 容器启动时，它的 `webapps 目录下`就一定会存在 sample.war 文件。(这个文件是 WAR 包容器启动时拷贝到这个 Volume 里的，这个 Volume 是被这两个容器`共享`的)
-
-   
-
-###### Init Container容器
-
-1. 在 Pod 中，都会比 spec.containers 定义的用户容器先启动
-2. Init Container 容器会按顺序逐一启动，而直到它们都启动并且退出了，用户容器才会启动
+   > Tomcat 容器同样声明了挂载 app-volume 到自己的 webapps 目录下。所以等Tomcat 容器启动时，它的 webapps目录下一定会存在 sample.war 文件。(这个文件是 WAR 包容器启动时拷贝到这个 Volume 里的，这个 Volume 是被这两个容器`共享`的)
 
 
 
-Init Container 的方式优先运行 WAR 包容器，扮演了一个 sidecar 的角色。
+
+###### Init容器
+
+1. init容器会比用户容器先启动
+2. Init容器会按顺序逐一启动，而直到它们都启动并且退出了，用户容器才会启动
+
+
+
+**Init容器应用场景**
+
+例如上面的例子，以Init Container的方式优先运行WAR包容器，扮演了一个 sidecar 的角色。
 
 > sidecar指可以在一个 Pod 中，启动一个辅助容器，来完成一些独立于主进程（主容器）之外的工作。
 >
-> 比如，在这个Pod 中，Tomcat 容器是我们要使用的主容器，而 WAR 包容器的存在，只是为了给它提供一个 WAR 包而已
+> 比如，在这个Pod 中，Tomcat容器是我们要使用的主容器，而 WAR包容器的存在，只是为了给它提供一个 WAR包而已
 
 
 
 ### 例2：容器的日志收集
 
-需求：有一个应用，需要不断地把日志文件输出到`容器的 /var/log 目录`中
+需求：有一个应用，需要不断地把日志文件输出到`容器的/var/log目录`中
 
-1. 可以把一个 Pod 里的 Volume 挂载到`应用容器的 /var/log 目录`上
+1. 可以把一个 Pod 里的 Volume 挂载到`应用容器的/var/log目录`上
 
-2. 接下来 `sidecar 容器`就只需要做一件事儿，就是不断地从自己的 `/var/log 目录里读取日志文件`，转发到 MongoDB 或者 Elasticsearch 中存储起来
+2. 接下来 `sidecar容器`就只需要做一件事儿，就是不断地从自己的 `/var/log 目录里读取日志文件`，转发到 MongoDB 或者 Elasticsearch 中存储起来
 
 
 
 # 三、Pod对象的基本概念
 
- Pod 级别的字段：凡是调度、网络、存储，以及安全相关的属性
-
-
+ Pod级别的字段：凡是调度、网络、存储，以及安全相关的属性
 
 > 可以阅读 https://github.com/kubernetes/api/blob/master/core/v1/types.go 里，`type Pod struct `，尤其是 `PodSpec 部分`的内容，了解一个 Pod 的 YAML 文件的常用字段及其作用
 
@@ -229,7 +227,7 @@ Init Container 的方式优先运行 WAR 包容器，扮演了一个 sidecar 的
 
 ## Pod级别的字段
 
-### NodeSelector
+**NodeSelector**
 
 > 将 Pod 与 Node(k8s节点) 进行绑定
 
@@ -242,7 +240,7 @@ spec:
    disktype: ssd
 ```
 
-### NodeName
+**NodeName**
 
 > pod经过调度后被赋予k8s节点名
 
@@ -252,7 +250,7 @@ spec:
 
 
 
-### HostAliases
+**HostAliases**
 
 > 定义了 Pod 的 hosts 文件（比如 /etc/hosts）内容
 
@@ -289,7 +287,7 @@ cat /etc/hosts
 
 
 
-### shareProcessNamespace
+**shareProcessNamespace**
 
 凡是跟`容器的 Linux Namespace 相关的属性`，也一定是 Pod 级别的
 
@@ -324,7 +322,7 @@ spec:
 
 
 
-### hostNetwork/hostIPC/hostPID
+**hostNetwork/hostIPC/hostPID**
 
 凡是 Pod 中的容器要共享宿主机的 Namespace，也一定是 Pod 级别的定义
 
@@ -384,7 +382,7 @@ spec:
 
 
 
-### Lifecycle 字段
+### Lifecycle字段*
 
 作用是在`容器状态发生变化时`触发一系列“钩子”
 
@@ -430,13 +428,13 @@ spec:
 >
 >
 >
->当然，如果 `postStart 执行超时或者错误`，Kubernetes 会在该 Pod 的 Events 中报出该容器启动失败的错误信息，导致 Pod 也处于`失败`的状态
+>当然，如果 `postStart 执行超时或者错误`，k8s会在该 Pod 的 Events 中报出该容器启动失败的错误信息，导致 Pod 也处于`失败`的状态。
 
 2. preStop参数
 
->发生在`容器被杀死之前`（比如收到了 SIGKILL 信号）
+>发生在`容器被杀死之前`（比如收到了 SIGKILL 信号）。
 >
->注意：preStop 操作的执行，是同步的。所以它会`阻塞`当前的容器杀死流程，直到这个 Hook 定义操作完成之后，才允许容器被杀死，这跟 postStart 不一样
+>注意：preStop 操作的执行，是同步的。所以它会`阻塞`当前的容器杀死流程，直到这个 Hook 定义操作完成之后，才允许容器被杀死，这跟 postStart 不一样。
 
 
 
@@ -447,17 +445,17 @@ Pod 生命周期的变化，主要体现在 `Pod API 对象的 Status 部分`，
 
 
 
-### Pod.status.phase
+### Pod.status.phase字段*
 
-`pod.status.phase`，就是 Pod 的当前状态，有如下几种情况：
+`pod.status.phase`，就是Pod的当前状态，有如下几种情况：
 
 1. Pending
 
->表示Pod 的 YAML 文件已经提交给了 Kubernetes，`API 对象已经被创建并保存在 Etcd `当中。但是，这个 Pod 里`有些容器`因为某种原因而不能被顺利创建。比如，`调度不成功`
+>表示Pod 的 YAML 文件已经提交给了k8s，API对象已经被创建并保存在 Etcd 当中。但是，这个 Pod 里`有些容器`因为某种原因而不能被顺利创建。比如，`调度不成功`
 
 2. Running
 
->表示Pod 已经`调度成功`，跟`一个具体的节点绑定`。它包含的容器都已经创建成功，并且至少有一个正在运行中
+>表示Pod已经`调度成功`，跟`一个具体的节点绑定`。它包含的容器都已经创建成功，并且至少有一个正在运行中
 
 3. Succeeded
 
@@ -473,7 +471,7 @@ Pod 生命周期的变化，主要体现在 `Pod API 对象的 Status 部分`，
 
 
 
-### Conditions
+### Conditions字段*
 
 Pod 对象的 `Status 字段`，还可以再细分出一组 `Conditions`，主要用于描述造成当前 Status 的具体原因是什么。
 
@@ -492,13 +490,13 @@ Pod 对象的 `Status 字段`，还可以再细分出一组 `Conditions`，主�
 
 比如Pod 当前的 Status 是 Pending，对应的 Condition 是 Unschedulable，这就意味着它的调度出现了问题。
 
-Pod 的这些状态信息，是我们`判断应用运行情况的重要标准`，尤其是 Pod 进入了`非“Running”状态`后，快速根据它所代表的异常情况开始跟踪和定位。
+**Pod的这些状态信息，是我们`判断应用运行情况的重要标准`，尤其是 Pod 进入了`非“Running”状态`后，快速根据它所代表的异常情况开始跟踪和定位。**
 
 
 
 ## 补充：Pod非Running状态的例子
 
-举出一些 Pod（即容器）的状态是 `Running`，但是应用其实已经停止服务的例子？
+举出一些Pod的状态是 `Running`，但是应用其实已经停止服务的例子？
 
 1. 程序本身有 bug，本来应该返回 200，但因为代码问题，返回的是500
 2. 程序因为内存问题，已经僵死，但进程还在，但无响应
@@ -521,7 +519,7 @@ Pod 的这些状态信息，是我们`判断应用运行情况的重要标准`�
 
 为容器提供预先定义好的数据；它们不是为了存放容器里的数据，也不是用来进行`容器和宿主机`之间的数据交换。
 
-> 从容器的角度来看，这些 Volume 里的信息仿佛是被 Kubernetes“投射”（Project）进入容器当中的。
+> 从容器的角度来看，这些 Volume 里的信息仿佛是被k8s“投射”（Project）进入容器当中的。
 
 
 
