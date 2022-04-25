@@ -530,9 +530,9 @@ Pod 对象的 `Status 字段`，还可以再细分出一组 `Conditions`，主�
 
 ##### 作用
 
-把Pod要访问的加密数据(例如数据库的账密信息)存放到 Etcd 中，然后在Pod的容器里挂载Volume，可以访问Secret 里保存的信息。
+把Pod要访问的加密数据（例如数据库的账密信息）存放到 Etcd 中，然后在Pod的容器里挂载Volume，可以访问Secret里保存的信息。
 
-如果Etcd里的Secret对象的数据被更新，Pod挂载的Sectet文件内容也会被更新（kubelet 组件在定时维护这些 Volume）
+如果Etcd里的Secret对象的数据被更新，Pod挂载的Sectet文件内容也会被更新（kubelet组件在定时维护这些 Volume）
 
 
 
@@ -571,7 +571,7 @@ data:
   pass: MWYyZDFlMmU2N2Rm
 ```
 
-注意，Secret 对象要求这些数据必须是经过 `Base64 转码的`，以免出现明文密码的安全隐患。
+注意，Secret 对象要求这些数据必须是经过 `Base64 转码的`，避免明文安全隐患。
 
 ```shell
 # 命令行base64转码
@@ -581,7 +581,7 @@ $ echo -n '1f2d1e2e67df' | base64
 MWYyZDFlMmU2N2Rm
 ```
 
-在生产环境中，需要在k8s中开启 Secret 的加密插件，增强数据的安全性。
+在生产环境中，需要在k8s中开启Secret的加密插件，增强数据的安全性。
 
 
 
@@ -602,7 +602,7 @@ pass          Opaque                                1         51s
 
 ```yaml
 apiVersion: v1
-kind: Pod
+kind: Pod # Pod类型
 metadata:
   name: test-projected-volume 
 spec:
@@ -626,7 +626,7 @@ spec:
           name: pass
 ```
 
-上面Pod声明挂载的 Volume是 `projected 类型`，它的数据来源（sources）是名为 user 和 pass 的 Secret 对象，分别对应的是`数据库的用户名和密码`。
+上面Pod声明挂载的 Volume是 projected 类型，它的数据来源（sources）是名为 user 和 pass 的 Secret 对象，分别对应的是 数据库的用户名和密码。
 
 ```bash
 # 创建Pod
@@ -646,7 +646,7 @@ admin
 
 ### 2、ConfigMap
 
-与 Secret 类似，区别在于 ConfigMap 保存的是不需要加密的、应用所需的配置信息。
+与Secret类似，区别在于ConfigMap保存的是不需要加密的、应用所需的配置信息。
 
 > 用法几乎与 Secret 完全相同：可以使用 kubectl create configmap 从文件 或者 目录创建 ConfigMap，也可以直接编写 ConfigMap 对象的 YAML 文件。
 
@@ -658,9 +658,7 @@ admin
 
 > Downward API 能够获取到的信息，一定是 Pod 里的容器进程启动之前就能够确定下来的信息。
 >
-> 
->
-> 如果要获取 Pod 容器运行后才会出现的信息（比如容器进程的 PID），肯定不能使用 Downward API 了，应该考虑在 Pod 里定义一个 sidecar 容器。
+> 如果要获取 Pod 容器运行后才会出现的信息（比如容器进程的 PID），肯定不能使用 Downward API 了，应该考虑在 Pod 里定义一个sidecar容器。
 
 
 
@@ -668,19 +666,19 @@ admin
 
 **Service Account和ServiceAccountToken**
 
-* Service Account：是Kubernetes系统内置的一种`“服务账户”`，是 Kubernetes 进行权限分配的对象，绑定了ServiceAccountToken
+* Service Account：是k8s系统内置的一种`“服务账户”`，是k8s进行权限分配的对象，绑定了ServiceAccountToken
 
 * ServiceAccountToken：一个特殊的 Secret 对象，存Service Account 的授权信息和文件
 
-> 任何运行在 Kubernetes 集群上的应用，都必须使用这个 ServiceAccountToken 里保存的授权信息，也就是 Token，才可以合法地访问 API Server
+> 任何运行在k8s集群上的应用，都必须使用这个ServiceAccountToken里保存的授权信息，也就是Token，才可以合法地访问 API Server
 
 
 
-Kubernetes已经提供了一个默认“服务账户”（default Service Account），任何一个运行在 Kubernetes 里的 Pod，都可以直接使用这个默认的 Service Account，而无需显示地声明挂载它，靠的正是Projected Volume 机制。
+k8s已经提供了一个默认“服务账户”（default Service Account），任何一个运行在k8s里的 Pod，都可以直接使用这个默认的 Service Account，而无需显示地声明挂载它，靠的正是Projected Volume 机制。
 
 
 
-查看一下任意一个运行在 Kubernetes 集群里的 Pod，可以发现，每一个 Pod都已经自动声明一个类型是 Secret、名为 default-token-xxxx 的 Volume，然后自动挂载在每个容器的一个固定目录`/var/run/secrets/kubernetes.io/serviceaccount`上。
+查看一下任意一个运行在k8s集群里的 Pod，可以发现，每一个 Pod都已经自动声明一个类型是 Secret、名为 default-token-xxxx 的 Volume，然后自动挂载在每个容器的一个固定目录`/var/run/secrets/kubernetes.io/serviceaccount`上。
 
 比如：
 
@@ -701,7 +699,7 @@ Volumes:
 
 
 
-1. Kubernetes在每个 Pod 创建的时，自动在它的 spec.volumes 部分添加上了默认 ServiceAccountToken 的定义，然后自动给每个容器加上了对应的 volumeMounts 字段。这个过程对于用户来说是完全透明的。
+1. k8s在每个 Pod 创建的时，自动在它的 spec.volumes 部分添加上了默认 ServiceAccountToken 的定义，然后自动给每个容器加上了对应的 volumeMounts 字段。这个过程对于用户来说是完全透明的。
 
 2. 一旦 Pod 创建完成，容器里的应用就可以直接从这个默认 ServiceAccountToken 的挂载目录里访问到授权信息和文件，进而访问并操作 Kubernetes API 。
 
