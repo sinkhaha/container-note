@@ -12,7 +12,7 @@ Deployment对象实现了一个非常重要的功能：Pod 的“水平扩展 / 
 
 
 
-### Deployment对象
+### Deployment对象*
 
 如nginx-deployment.yaml
 
@@ -48,9 +48,7 @@ $ kubectl create -f nginx-deployment.yaml --record
 
 注意：加了–record参数， 是为了记录下每次操作所执行的命令，以方便后面查看
 
-
-
-**2、检查一下 nginx-deployment 创建后的状态信息**
+**2、检查一下 nginx-deployment 创建后的状态信息* ** 
 
 ```bash
 $ kubectl get deployments
@@ -217,7 +215,7 @@ deployment.extensions/nginx-deployment edited
 2. 然后就可以修改这里的 Pod 模板部分了（比如，将 nginx 镜像的版本升级到了 1.9.1）
 
 3. kubectl edit 指令编辑完成后，保存退出
-4. Kubernetes 就会立刻触发“滚动更新”的过程
+4. k8s就会立刻触发“滚动更新”的过程
 
 
 
@@ -233,7 +231,7 @@ deployment.extensions/nginx-deployment successfully rolled out
 
 ### 滚动更新的流程
 
-可以`查看 Deployment 的 Events`，看到这个“滚动更新”的流程：
+可以`查看Deployment的Events`，看到这个“滚动更新”的流程：
 
 ```bash
 $ kubectl describe deployment nginx-deployment
@@ -250,7 +248,7 @@ Events:
   Normal  ScalingReplicaSet  14s   deployment-controller  Scaled down replica set nginx-deployment-3167673210 to 0
 ```
 
-1. 当修改了 Deployment 里的 Pod 定义之后，Deployment控制器会使用这个修改后的 Pod 模板，创建一个新的 ReplicaSet（hash=1764197365），这个新的 ReplicaSet 的初始 Pod 副本数是：0
+1. 当修改了Deployment里的 Pod 定义之后，Deployment控制器会使用这个修改后的 Pod 模板，创建一个新的 ReplicaSet（hash=1764197365），这个新的 ReplicaSet 的初始 Pod 副本数是：0
 
 2. 然后，在 Age=24s 的位置，Deployment控制器开始将这个新的 ReplicaSet 所控制的 Pod 副本数从 0 个变成 1 个，即：“水平扩展”出一个副本
 
