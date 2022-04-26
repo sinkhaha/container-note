@@ -459,7 +459,7 @@ hostnames-bvc05
 
 ### **Headless Service**
 
-在某些场景中，开发人员可能不想使用Service提供的负载均衡功能，而希望自己来控制负载均衡策略，针对这种情况，k8s提供了HeadLinesss Service，这类Service不会分配Cluster IP，如果想要访问Service，只能通过Service的域名进行查询。
+在某些场景中，开发人员可能不想使用Service提供的负载均衡功能，而希望自己来控制负载均衡策略，针对这种情况，k8s提供了HeadLinesss Service，这类Service被创建后不会分配一个VIP（Virtual IP），而是会以 DNS 记录的方式暴露出它所代理的 Pod，如果想要访问Service，只能通过Service的域名进行查询
 
 ```yaml
 apiVersion: v1
@@ -477,6 +477,16 @@ spec:
     port: 80
     targetPort: 9376 # 这个service的80端口代理Pod的9376端口
 ```
+
+当创建了一个 Headless Service 之后，它所代理的所有 Pod 的 IP 地址，都会被绑定一个这样格式的 DNS 记录，如下所示：
+
+```bash
+<pod-name>.<svc-name>.<namespace>.svc.cluster.local
+```
+
+这个 DNS 记录，正是k8s项目为 Pod 分配的唯一的“可解析身份”（Resolvable Identity）
+
+> 有了这个“可解析身份”，只要知道了一个 Pod 的名字，以及它对应的 Service 的名字，就可以非常确定地通过这条 DNS 记录访问到 Pod 的 IP 地址
 
 
 

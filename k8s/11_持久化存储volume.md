@@ -835,8 +835,3 @@ Source:
 这个 PV 里的各种定义，比如 StorageClass 的名字、本地磁盘挂载点的位置，都可以通过 provisioner 的配置文件指定。当然，provisioner 也会负责前面提到的 PV 的删除工作。
 
 
-
-而这个 provisioner 本身，其实也是一个我们前面提到过的External Provisioner，它的部署方法，在对应的文档里有详细描述。这部分内容，就留给你课后自行探索了。
-
-
-

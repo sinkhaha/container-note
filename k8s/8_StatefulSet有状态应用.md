@@ -66,11 +66,11 @@ Service 是用来将一组 Pod 暴露给外界访问的一种机制
 
 **在第二种 Service DNS 的方式下，具体还可以分为两种处理方法：**
 
-* 是 Normal Service
+* 一种是 Normal Service
 
   > 这种情况下，访问“my-svc.my-namespace.svc.cluster.local”解析到的，正是 my-svc 这个 Service 的 VIP，后面的流程就跟 VIP 方式一致了
 
-* 是 Headless Service
+* 另一种是 Headless Service
 
   > 这种情况下，访问“my-svc.my-namespace.svc.cluster.local”解析到的，直接就是 my-svc 代理的某一个 Pod 的 IP 地址。
   >
