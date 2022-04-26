@@ -7,12 +7,10 @@ DaemonSet的主要作用，是在k8s集群里，运行一个 Daemon Pod。
 ## Daemon Pod特征
 
 1. 这个Pod运行在k8s集群里的每一个节点（Node）上
-
 2. 且每个节点上只有一个这样的Pod
-
 3. 当有新节点加入k8s集群后，该 Pod 会自动地在新节点上被创建出来；而当旧节点被删除后，节点上的 Pod 也相应地会被回收掉
 
-   
+
 
 ## Daemon Pod使用场景
 
@@ -38,7 +36,7 @@ DaemonSet的主要作用，是在k8s集群里，运行一个 Daemon Pod。
 
 **例如在网络插件还没安装时，要先启动一个网络插件的Agent组件？**
 
-这时，k8s集群还没有安装网络插件，即整个集群没有可用的容器网络，所有Worker节点的状态都是 NotReady（NetworkReady=false），这种情况普通的Pod不能运行在集群上，此时网络插件的Agent就要以DaemonSet Pod启动。之所以Daemon Pod能运行，其实就是依靠 Toleration实现的
+这时，k8s集群还没有安装网络插件，即整个集群没有可用的容器网络，所有Worker节点的状态都是 NotReady（NetworkReady=false），这种情况普通的Pod不能运行在集群上，此时网络插件的Agent组件就要以DaemonSet Pod启动。之所以此时Daemon Pod能运行，其实就是依靠 Toleration实现的。
 
 
 
@@ -48,12 +46,12 @@ DaemonSet的主要作用，是在k8s集群里，运行一个 Daemon Pod。
 
 2. 也使用 selector 选择管理所有携带了 name=xxx 标签的 Pod
 
-3. 而这些 Pod 的模板，也是用 template 字段定义的
+3. 而这些Pod的模板，也是用template字段定义的
 
 
 
 
-### DaemonSet对象例子
+### DaemonSet API对象例子
 
 fluentd-elasticsearch.yaml
 
@@ -115,14 +113,14 @@ spec:
 
 ## DaemonSet控制器原理
 
-1. DaemonSet控制循环会遍历所有节点，然后根据节点上是否有被管理 Pod 的情况，来决定是否要创建或者删除一个 Pod
-2. 在创建每个 Pod 时，DaemonSet 会自动给这个 Pod 加上一个 nodeAffinity，从而保证这个 Pod 只会在指定节点上启动。同时，它还会自动给这个 Pod 加上一个 Toleration，从而忽略节点的 unschedulable“污点”
+1. DaemonSet控制循环会遍历`所有节点`，然后根据节点上是否有被管理 Pod 的情况，来决定是否要创建或者删除一个 Pod
+2. 在创建每个Pod时，DaemonSet会自动给这个Pod加上一个nodeAffinity，从而保证这个Pod只会在指定节点上启动。同时，它还会自动给这个Pod加上一个Toleration，从而忽略节点的 unschedulable“污点”
 
 
 
 ### 如何保证每个Node只有一个Pod
 
-**DaemonSet 是如何保证每个 Node 上有且只有一个被管理的 Pod 呢？**
+**DaemonSet 是如何保证每个Node上有且只有一个被管理的 Pod 呢？**
 
 ![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/DaemonSet%E6%8E%A7%E5%88%B6%E5%99%A8.png)
 
@@ -191,17 +189,19 @@ DaemonSet会给它管理的Pod自动加上另外一个`与调度相关的字段`
 
 前提：
 
+当初始化节点时，会添加node.kubernetes.io/unschedulable污点，来避免竟态的发生。
+
 正常情况下，被标记了unschedulable“污点”的节点，是不会有任何 Pod 被调度上去的（effect: NoSchedule）。
 
 
 
 例子：
 
-Pod要容忍”所有被标记为 unschedulable“污点”的 Node，意味着Pod可以运行在被标记为unschedulable的节点上。
+一个Pod容忍”所有被标记为 unschedulable“污点”的 Node，意味着该Pod可以运行在被标记为unschedulable的节点上。
 
 
 
-DaemonSet 自动地给被管理的 Pod 加上了这个特殊的 Toleration，就使得这些 Pod 可以忽略这个限制，继而保证每个节点上都会被调度一个 Pod。格式如下：
+DaemonSet 自动地给被管理的 Pod 加上了这个特殊的 Toleration，保证每个节点上都会被调度一个 Pod。格式如下：
 
 ```yaml
 apiVersion: v1
@@ -250,13 +250,13 @@ template:
 
 在默认情况下，k8s 集群不允许用户在 Master 节点部署 Pod。
 
-因为Master 节点默认携带了一个叫作node-role.kubernetes.io/master的“污点”。
+因为Master节点默认携带了一个叫作node-role.kubernetes.io/master的“污点”。
 
 
 
 例子：
 
-为了能在 Master 节点上部署 DaemonSet 的 Pod，就必须让这个 Pod“容忍”node-role.kubernetes.io/master这个“污点”。在上面例子的 fluentd-elasticsearch DaemonSet 里，就加上了Toleration，表示允许运行在master节点上，：
+为了能在 Master 节点上部署DaemonSet的Pod，就必须让这个 Pod“容忍”node-role.kubernetes.io/master这个“污点”。在上面例子的 fluentd-elasticsearch DaemonSet 里，就加上了Toleration，表示允许运行在master节点上，：
 
 ```yaml
 ...
