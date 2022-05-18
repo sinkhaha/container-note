@@ -30,7 +30,7 @@ kubectl apply -f <yaml配置文件>
 
 # k8s和容器的关系
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/%E5%AE%B9%E5%99%A8%E7%9A%84%E6%9C%AC%E8%B4%A8.drawio.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/%E5%AE%B9%E5%99%A8%E7%9A%84%E6%9C%AC%E8%B4%A8.drawio.png)
 
 
 

@@ -115,7 +115,7 @@ nginx-deployment-3167673210   3         3         3       20s
 
 **5、当创建以上Deployment后，Deployment、ReplicaSet、Pod的关系如下**
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20210813213259.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/20210813213259.png)
 
 
 
@@ -300,7 +300,7 @@ spec:
 
 **滚动更新时，Deployment、ReplicaSet和Pod的关系图**
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20210813220831.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/20210813220831.png)
 
 
 

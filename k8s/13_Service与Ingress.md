@@ -19,7 +19,7 @@
 
 创建service 后， `API Service` 会监听service ，然后把service信息写入etcd ，`kube-proxy` 也会监听etcd中 service的信息，并且将service信息转成对应的访问规则。
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/service_kube-proxy.drawio%20(1).png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/service_kube-proxy.drawio%20(1).png)
 
 
 
@@ -33,7 +33,7 @@
 
 该模式下，kube-proxy充当了一个四层负载均衡器的角色。
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/username.drawio.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/username.drawio.png)
 
 **优点：**
 
@@ -53,7 +53,7 @@ iptables模式下 `kube-proxy` 为每一个pod创建相对应的 `iptables` 规�
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/iptables.drawio.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/iptables.drawio.png)
 
 **优点：**
 
@@ -166,7 +166,7 @@ spec:
 
 ipvs模式与iptable模式类型， `kube-proxy` 会根据pod的变化创建相应的 `ipvs` 转发规则。
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/ipvx.drawio.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/ipvx.drawio.png)
 
 
 
@@ -336,7 +336,7 @@ https://www.cnblogs.com/SR-Program/p/15574213.html
 
 **架构图如下：**
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/clusterIP.drawio%20(1).png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/clusterIP.drawio%20(1).png)
 
 
 
@@ -405,7 +405,7 @@ Endpoint是k8s中的一个资源对象，存储在etcd中，用来记录一个se
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/endpoint.drawio.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/endpoint.drawio.png)
 
 
 
@@ -502,7 +502,7 @@ NodePort service会将service 的端口与 node 的端口进行映射,当我们�
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/nodeport.drawio.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/nodeport.drawio.png)
 
 ### API定义
 
@@ -631,7 +631,7 @@ spec:
 
 **架构图如下：**
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220423183632.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/20220423183632.png)
 
 
 
@@ -671,7 +671,7 @@ spec:
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220423184059.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/20220423184059.png)
 
 
 
@@ -852,7 +852,7 @@ Ingress是k8s内置的一个`全局的负载均衡器`，可以替代LoadBalance
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220423184736.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/20220423184736.png)
 
 
 

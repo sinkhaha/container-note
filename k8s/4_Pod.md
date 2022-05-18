@@ -8,7 +8,7 @@ Pod是对容器的进一步抽象和封装。它对容器进行了组合，添�
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/Pod.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/Pod.png)
 
 
 
@@ -53,7 +53,7 @@ Pod是通过Infra中间容器实现的，它是一个永远处于"暂停"状态�
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/Infra%E5%92%8C%E5%AE%B9%E5%99%A8%E7%9A%84%E5%85%B3%E7%B3%BB.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/Infra%E5%92%8C%E5%AE%B9%E5%99%A8%E7%9A%84%E5%85%B3%E7%B3%BB.png)
 
 
 

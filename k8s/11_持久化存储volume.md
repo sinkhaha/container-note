@@ -327,7 +327,7 @@ No events.
 
 
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/20220406230816.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/20220406230816.png)
 
 
 

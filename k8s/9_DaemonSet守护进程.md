@@ -122,7 +122,7 @@ spec:
 
 **DaemonSet 是如何保证每个Node上有且只有一个被管理的 Pod 呢？**
 
-![](https://gitee.com/sinkhaha/picture/raw/master/img/CICD/DaemonSet%E6%8E%A7%E5%88%B6%E5%99%A8.png)
+![](https://sink-blog-pic.oss-cn-shenzhen.aliyuncs.com/img/CICD/DaemonSet%E6%8E%A7%E5%88%B6%E5%99%A8.png)
 
 
 
